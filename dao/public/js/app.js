@@ -203,18 +203,24 @@ function render() {
 
 function renderLobby() {
   $("lobby-code").textContent = G.code;
+  const isHost = G.you === G.hostSeat;
   $("lobby-players").innerHTML = G.seats.map((s, i) => `
     <li>
       <span class="dot" style="background:${s.color}"></span>
       <b>${esc(s.nick)}</b>${i === G.you ? "(你)" : ""}
       ${i === G.hostSeat ? '<span class="tag">房主</span>' : ""}
-      <span class="conn ${s.connected ? "on" : ""}"></span>
+      ${s.isBot ? '<span class="tag bot">🤖</span>' : ""}
+      ${s.isBot && isHost ? `<button class="bot-rm" data-seat="${i}">移除</button>` : ""}
+      ${s.isBot ? "" : `<span class="conn ${s.connected ? "on" : ""}"></span>`}
     </li>`).join("");
-  const isHost = G.you === G.hostSeat;
+  for (const btn of $("lobby-players").querySelectorAll(".bot-rm")) {
+    btn.onclick = () => send({ t: "remove_bot", seat: +btn.dataset.seat });
+  }
   $("host-panel").classList.toggle("hidden", !isHost);
+  $("btn-addbot").disabled = G.seats.length >= 4;
   $("btn-start").disabled = G.seats.length < 2;
   $("lobby-wait").textContent = isHost
-    ? (G.seats.length < 2 ? "至少 2 人才能开始" : "")
+    ? (G.seats.length < 2 ? "至少 2 人才能开始(可以添加机器人陪练)" : "")
     : "等待房主开始游戏…";
 }
 
@@ -274,7 +280,7 @@ function renderPlayers() {
     <div class="player ${active ? "active" : ""}" data-seat="${i}">
       <span class="dot" style="background:${s.color}"></span>
       <span class="pname">${esc(s.nick)}${i === G.you ? "(你)" : ""}</span>
-      <span class="conn ${s.connected ? "on" : ""}"></span>
+      ${s.isBot ? '<span title="机器人">🤖</span>' : `<span class="conn ${s.connected ? "on" : ""}"></span>`}
       <span class="badges">
         ${G.longest.holder === i ? `<span title="最长路 ${G.longest.len} 段">🛤️</span>` : ""}
         ${G.army.holder === i ? `<span title="最大军团">⚔️</span>` : ""}
@@ -623,6 +629,7 @@ function init() {
   };
   $("join-code").addEventListener("keydown", (e) => { if (e.key === "Enter") $("btn-join").click(); });
   $("btn-leave").onclick = leave;
+  $("btn-addbot").onclick = () => send({ t: "add_bot" });
   $("btn-start").onclick = () => send({ t: "start", winVP: +$("win-vp").value });
   $("btn-roll").onclick = () => send({ t: "roll" });
   $("btn-end").onclick = () => { mode = null; send({ t: "end" }); };

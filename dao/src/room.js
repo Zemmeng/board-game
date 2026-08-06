@@ -11,12 +11,15 @@ import {
 } from "../public/js/shared/rules.js";
 
 const IDLE_WIPE_MS = 24 * 60 * 60 * 1000; // 闲置一天后清房
+const BOT_NICKS = ["岛民·甲", "岛民·乙", "岛民·丙"];
 
 export class GameRoom {
   constructor(ctx) {
     this.ctx = ctx;
+    this.botTimer = null;
     this.ctx.blockConcurrencyWhile(async () => {
       this.g = (await this.ctx.storage.get("game")) ?? null;
+      this.scheduleBot(); // 实例休眠后被唤醒时,若正轮到机器人,续上它的回合
     });
   }
 
@@ -135,6 +138,8 @@ export class GameRoom {
 
     if (g.phase === "lobby") {
       if (msg.t === "start") return this.onStart(seat, msg);
+      if (msg.t === "add_bot") return this.onAddBot(seat);
+      if (msg.t === "remove_bot") return this.onRemoveBot(seat, msg);
       this.fail("游戏尚未开始");
     }
     if (g.phase === "ended") this.fail("对局已结束");
@@ -200,6 +205,37 @@ export class GameRoom {
     g.seats[i].connected = true;
     ws.serializeAttachment({ token });
     this.send(ws, { t: "joined", seat: i, code: g.code });
+    await this.commit();
+    this.broadcast();
+  }
+
+  async onAddBot(seat) {
+    const g = this.g;
+    if (g.seats[seat].token !== g.hostToken) this.fail("只有房主能添加机器人");
+    if (g.seats.length >= 4) this.fail("房间已满(最多 4 人)");
+    const nick = BOT_NICKS.find((n) => !g.seats.some((s) => s.nick === n));
+    const i = g.seats.length;
+    g.seats.push({
+      token: "bot:" + crypto.randomUUID(), nick, isBot: true,
+      color: PLAYER_COLORS[i], colorName: COLOR_NAMES[i],
+      connected: true,
+      res: Object.fromEntries(RES_KEYS.map((k) => [k, 0])),
+      devs: [], knights: 0,
+      roads: [], villages: [], cities: [],
+    });
+    this.log(`🤖 ${nick} 加入了房间`);
+    await this.commit();
+    this.broadcast();
+  }
+
+  async onRemoveBot(seat, msg) {
+    const g = this.g;
+    if (g.seats[seat].token !== g.hostToken) this.fail("只有房主能移除机器人");
+    const i = msg.seat;
+    if (!g.seats[i]?.isBot) this.fail("只能移除机器人");
+    this.log(`🤖 ${g.seats[i].nick} 离开了房间`);
+    g.seats.splice(i, 1);
+    g.seats.forEach((s, j) => { s.color = PLAYER_COLORS[j]; s.colorName = COLOR_NAMES[j]; });
     await this.commit();
     this.broadcast();
   }
@@ -557,6 +593,168 @@ export class GameRoom {
     this.broadcast();
   }
 
+  // ---------- 机器人 ----------
+
+  // 当前是否轮到机器人做事(回合、开局放置、弃牌、移强盗)
+  botNeeded() {
+    const g = this.g;
+    if (!g || g.winner !== null) return false;
+    if (g.phase === "setup") return g.seats[g.setup.seq[g.setup.idx]]?.isBot;
+    if (g.phase !== "play") return false;
+    const t = g.turn;
+    if (t.pending?.t === "discard") {
+      return Object.keys(t.pending.need).some((i) => g.seats[+i]?.isBot);
+    }
+    return g.seats[t.seat]?.isBot;
+  }
+
+  scheduleBot() {
+    if (this.botTimer || !this.botNeeded()) return;
+    this.botTimer = setTimeout(async () => {
+      this.botTimer = null;
+      try {
+        await this.botStep();
+      } catch (e) {
+        // 机器人决策失误不能卡死全场:兜底结束回合/掷骰
+        console.error("bot step failed:", e?.message);
+        try {
+          const t = this.g?.turn;
+          if (this.g?.phase === "play" && this.g.seats[t.seat]?.isBot && !t.pending) {
+            if (t.rolled) await this.onEnd(t.seat);
+            else await this.onRoll(t.seat);
+          }
+        } catch {}
+      }
+    }, 550 + Math.random() * 450); // 稍作停顿,像个真人
+  }
+
+  // 每次只做一个动作;handler 内部的 broadcast 会再触发 scheduleBot 走下一步
+  async botStep() {
+    const g = this.g;
+    if (!this.botNeeded()) return;
+    const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+    const pips = (num) => (num ? 6 - Math.abs(7 - num) : 0);
+
+    if (g.phase === "setup") {
+      const seat = g.setup.seq[g.setup.idx];
+      if (g.setup.need === "village") {
+        // 挑相邻地格出产点数和最高的顶点
+        const spots = legalVillages(g, seat);
+        let best = spots[0], bestScore = -1;
+        for (const vid of spots) {
+          let score = 0;
+          for (const tk of tilesOfVertex(vid)) {
+            const tile = g.board.tiles.find((x) => x.k === tk);
+            if (tile.kind !== "desert") score += pips(tile.num);
+          }
+          score += Math.random(); // 同分随机打散
+          if (score > bestScore) { bestScore = score; best = vid; }
+        }
+        return this.onPlace(seat, { id: best });
+      }
+      return this.onPlace(seat, { id: pick(legalRoads(g, seat)) });
+    }
+
+    const t = g.turn;
+
+    if (t.pending?.t === "discard") {
+      const seat = Object.keys(t.pending.need).map(Number).find((i) => g.seats[i].isBot);
+      const s = g.seats[seat];
+      let left = t.pending.need[seat];
+      const give = Object.fromEntries(RES_KEYS.map((k) => [k, 0]));
+      // 从持有最多的种类开始弃
+      for (const k of [...RES_KEYS].sort((a, b) => s.res[b] - s.res[a])) {
+        const n = Math.min(left, s.res[k]);
+        give[k] = n;
+        left -= n;
+        if (!left) break;
+      }
+      return this.onDiscard(seat, { give });
+    }
+
+    if (t.pending?.t === "robber") {
+      const seat = t.seat;
+      // 优先挑有对手建筑可偷的地格
+      const options = g.board.tiles.filter((x) => x.k !== g.board.robber).map((tile) => {
+        const victims = [];
+        for (const vid of TILE_VERTICES.get(tile.k)) {
+          const b = buildingAt(g, vid);
+          if (b && b.seat !== seat && !victims.includes(b.seat) &&
+              RES_KEYS.some((k) => g.seats[b.seat].res[k] > 0)) victims.push(b.seat);
+        }
+        return { tile, victims };
+      });
+      const withVictims = options.filter((o) => o.victims.length);
+      const chosen = withVictims.length ? pick(withVictims) : pick(options);
+      return this.onRobber(seat, {
+        tile: chosen.tile.k,
+        victim: chosen.victims.length ? pick(chosen.victims) : null,
+      });
+    }
+
+    const seat = t.seat;
+    const s = g.seats[seat];
+
+    if (!t.rolled) {
+      const knight = s.devs.find((d) => d.c === "knight" && d.t < t.n);
+      if (!t.devPlayed && knight && Math.random() < 0.25) {
+        return this.onPlayDev(seat, { card: "knight" });
+      }
+      return this.onRoll(seat);
+    }
+
+    if (t.freeRoads > 0) {
+      const spots = legalRoads(g, seat);
+      if (spots.length && s.roads.length < PIECE_LIMIT.road) {
+        return this.onBuild(seat, { kind: "road", id: pick(spots) });
+      }
+      return this.onEnd(seat);
+    }
+    if (s.villages.length && s.cities.length < PIECE_LIMIT.city && canPay(s.res, COSTS.city)) {
+      return this.onBuild(seat, { kind: "city", id: pick(s.villages) });
+    }
+    if (s.villages.length < PIECE_LIMIT.village && canPay(s.res, COSTS.village)) {
+      const spots = legalVillages(g, seat);
+      if (spots.length) return this.onBuild(seat, { kind: "village", id: pick(spots) });
+    }
+    if (s.roads.length < PIECE_LIMIT.road && canPay(s.res, COSTS.road) &&
+        Math.random() < 0.75) {
+      const spots = legalRoads(g, seat);
+      if (spots.length) return this.onBuild(seat, { kind: "road", id: pick(spots) });
+    }
+    if (!t.devPlayed) {
+      const playable = s.devs.filter((d) => d.t < t.n && d.c !== "vp" && d.c !== "knight");
+      if (playable.length && Math.random() < 0.5) {
+        const card = pick(playable).c;
+        if (card === "monopoly") return this.onPlayDev(seat, { card, res: pick(RES_KEYS) });
+        if (card === "roads") {
+          if (s.roads.length < PIECE_LIMIT.road && legalRoads(g, seat).length) {
+            return this.onPlayDev(seat, { card });
+          }
+        }
+        if (card === "invent") {
+          const avail = RES_KEYS.filter((k) => g.bank[k] > 0);
+          if (avail.length) {
+            const r1 = pick(avail);
+            const avail2 = RES_KEYS.filter((k) => g.bank[k] > (k === r1 ? 1 : 0));
+            if (avail2.length) return this.onPlayDev(seat, { card, res: r1, res2: pick(avail2) });
+          }
+        }
+      }
+    }
+    if (g.deck.length && canPay(s.res, COSTS.dev) && Math.random() < 0.4) {
+      return this.onBuyDev(seat);
+    }
+    // 4:1 换缺口(优先换成一张都没有的资源)
+    const rich = RES_KEYS.filter((k) => s.res[k] >= 4);
+    if (rich.length && Math.random() < 0.8) {
+      const wants = RES_KEYS.filter((k) => s.res[k] === 0 && g.bank[k] > 0);
+      const want = wants.length ? pick(wants) : pick(RES_KEYS.filter((k) => k !== rich[0] && g.bank[k] > 0));
+      if (want) return this.onBankTrade(seat, { give: rich[0], get: want });
+    }
+    return this.onEnd(seat);
+  }
+
   // ---------- 称号与胜负 ----------
 
   updateArmy(seat) {
@@ -632,7 +830,7 @@ export class GameRoom {
       seats: g.seats.map((s, i) => {
         const base = {
           nick: s.nick, color: s.color, colorName: s.colorName,
-          connected: s.connected,
+          connected: s.connected, isBot: !!s.isBot,
           roads: s.roads, villages: s.villages, cities: s.cities,
           knights: s.knights,
           resCount: RES_KEYS.reduce((a, k) => a + s.res[k], 0),
@@ -662,5 +860,6 @@ export class GameRoom {
       const seat = this.seatOf(ws);
       this.send(ws, { t: "state", g: this.personalize(seat) });
     }
+    this.scheduleBot();
   }
 }
