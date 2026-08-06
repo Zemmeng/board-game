@@ -23,7 +23,7 @@ export function initBoard(svgEl, board) {
   svg.innerHTML = "";
   svg.setAttribute("viewBox", "-235 -225 470 450");
   layers = {};
-  for (const name of ["tiles", "pieces", "robber", "hl"]) {
+  for (const name of ["tiles", "pieces", "robber", "fx", "hl"]) {
     layers[name] = el("g", { class: "layer-" + name }, svg);
   }
 
@@ -100,6 +100,17 @@ export function updatePieces(g) {
 
 export function clearHighlights() {
   if (layers.hl) layers.hl.innerHTML = "";
+}
+
+// 产出时给对应地格打一道渐隐高光
+export function flashTiles(keys) {
+  for (const k of keys) {
+    const pts = TILE_VERTICES.get(k)
+      .map((vid) => { const p = px(VERTICES.get(vid)); return `${p.x.toFixed(1)},${p.y.toFixed(1)}`; })
+      .join(" ");
+    const node = el("polygon", { points: pts, class: "fx-flash" }, layers.fx);
+    setTimeout(() => node.remove(), 1400);
+  }
 }
 
 // type: "vertex" | "edge" | "tile";点击回调 cb(id)

@@ -5,7 +5,7 @@ import {
   legalVillages, legalRoads, canPay, publicVP,
   TILE_VERTICES, buildingAt,
 } from "./shared/rules.js";
-import { initBoard, updatePieces, showHighlights, clearHighlights } from "./render.js";
+import { initBoard, updatePieces, showHighlights, clearHighlights, flashTiles } from "./render.js";
 
 const $ = (id) => document.getElementById(id);
 const DICE_GLYPH = ["", "⚀", "⚁", "⚂", "⚃", "⚄", "⚅"];
@@ -99,9 +99,81 @@ function onMsg(m) {
     return;
   }
   if (m.t === "state") {
+    const prev = G;
     G = m.g;
+    // 本回合从"未掷"变"已掷":播掷骰动画,渲染时先别把点数剧透出来
+    const justRolled = !!(prev && prev.phase !== "lobby" && G.turn?.dice && prev.turn &&
+      prev.turn.n === G.turn.n && !prev.turn.rolled && G.turn.rolled);
+    if (justRolled) diceAnimating = true;
     render();
+    if (justRolled) {
+      const [d1, d2] = G.turn.dice;
+      animateDice(d1, d2);
+      if (d1 + d2 !== 7) {
+        const keys = G.board.tiles
+          .filter((t) => t.num === d1 + d2 && t.k !== G.board.robber)
+          .map((t) => t.k);
+        setTimeout(() => flashTiles(keys), 650);
+      }
+    }
+    animateGains(prev, G, justRolled ? 800 : 0);
   }
+}
+
+// ---------- 动画 ----------
+
+let diceAnimating = false;
+let diceTimer = null;
+
+function animateDice(d1, d2) {
+  const el = $("dice");
+  const t0 = Date.now();
+  el.classList.add("rolling");
+  clearInterval(diceTimer);
+  diceTimer = setInterval(() => {
+    if (Date.now() - t0 > 620) {
+      clearInterval(diceTimer);
+      el.classList.remove("rolling");
+      diceAnimating = false;
+      el.innerHTML = `<span class="die">${DICE_GLYPH[d1]}</span><span class="die">${DICE_GLYPH[d2]}</span> = ${d1 + d2}`;
+      return;
+    }
+    const r = () => DICE_GLYPH[1 + Math.floor(Math.random() * 6)];
+    el.innerHTML = `<span class="die">${r()}</span><span class="die">${r()}</span>`;
+  }, 75);
+}
+
+// 自己的手牌涨了:芯片弹跳 + 飘"+n";别人的手牌数涨了:计数弹一下
+function animateGains(prev, g, delay) {
+  if (!prev || prev.phase === "lobby" || g.phase === "lobby") return;
+  if (prev.you !== g.you || g.you < 0) return;
+  const pm = prev.seats[g.you]?.res, nm = g.seats[g.you]?.res;
+  const gains = [];
+  if (pm && nm) {
+    for (const k of RES_KEYS) if (nm[k] > pm[k]) gains.push([k, nm[k] - pm[k]]);
+  }
+  const bumps = [];
+  g.seats.forEach((s, i) => {
+    if (i !== g.you && prev.seats[i] && s.resCount > prev.seats[i].resCount) bumps.push(i);
+  });
+  if (!gains.length && !bumps.length) return;
+  setTimeout(() => {
+    for (const [k, n] of gains) {
+      const chip = document.querySelector(`#hand .chip[data-res="${k}"]`);
+      if (!chip) continue;
+      chip.classList.remove("empty");
+      chip.classList.add("gain-pop");
+      const f = document.createElement("span");
+      f.className = "gain-float";
+      f.textContent = "+" + n;
+      chip.appendChild(f);
+      setTimeout(() => { chip.classList.remove("gain-pop"); f.remove(); }, 950);
+    }
+    for (const i of bumps) {
+      const st = document.querySelector(`#players .player[data-seat="${i}"] .pstat`);
+      if (st) { st.classList.add("bump"); setTimeout(() => st.classList.remove("bump"), 600); }
+    }
+  }, delay);
 }
 
 // ---------- 总渲染 ----------
@@ -181,9 +253,11 @@ function renderBanner() {
   b.className = cls;
 
   const t = G.turn;
-  $("dice").innerHTML = t?.dice
-    ? `<span class="die">${DICE_GLYPH[t.dice[0]]}</span><span class="die">${DICE_GLYPH[t.dice[1]]}</span> = ${t.dice[0] + t.dice[1]}`
-    : "";
+  if (!diceAnimating) {
+    $("dice").innerHTML = t?.dice
+      ? `<span class="die">${DICE_GLYPH[t.dice[0]]}</span><span class="die">${DICE_GLYPH[t.dice[1]]}</span> = ${t.dice[0] + t.dice[1]}`
+      : "";
+  }
   $("btn-roll").classList.toggle("hidden", !(myTurn() && !t.rolled && !t.pending));
 }
 
@@ -197,7 +271,7 @@ function renderPlayers() {
       if (hidden > 0) vp = `${publicVP(G, i)}+${hidden}`;
     }
     return `
-    <div class="player ${active ? "active" : ""}">
+    <div class="player ${active ? "active" : ""}" data-seat="${i}">
       <span class="dot" style="background:${s.color}"></span>
       <span class="pname">${esc(s.nick)}${i === G.you ? "(你)" : ""}</span>
       <span class="conn ${s.connected ? "on" : ""}"></span>
@@ -220,7 +294,7 @@ function renderHand() {
   $("hand").innerHTML = `
     <div class="hand-row">
       ${RES_KEYS.map((k) => `
-        <span class="chip ${me.res[k] ? "" : "empty"}">
+        <span class="chip ${me.res[k] ? "" : "empty"}" data-res="${k}">
           <i style="background:${RES[k].color}"></i>${RES[k].name} <b>${me.res[k]}</b>
         </span>`).join("")}
     </div>
@@ -524,6 +598,22 @@ function requireNick() {
 
 function init() {
   $("nick").value = localStorage.getItem("dao-nick") ?? "";
+
+  // 造价对照表(悬停色块可看资源名)
+  const dots = (cost) => Object.entries(cost)
+    .flatMap(([k, n]) => Array(n).fill(`<i class="cost-dot" style="background:${RES[k].color}" title="${RES[k].name}"></i>`))
+    .join("");
+  const costRow = (label, cost) =>
+    `<div class="cost-row"><span>${label}</span><span class="cost-dots">${dots(cost)}</span></div>`;
+  $("costs").innerHTML =
+    `<div class="costs-title">造价表</div>` +
+    costRow("道路", COSTS.road) +
+    costRow("村庄 <b>1分</b>", COSTS.village) +
+    costRow("城邑 <b>2分</b>", COSTS.city) +
+    costRow("发展卡", COSTS.dev) +
+    `<div class="cost-row"><span>银行兑换</span><span>同种×4 换任意×1</span></div>` +
+    `<div class="cost-legend">${RES_KEYS.map((k) =>
+      `<span><i class="cost-dot" style="background:${RES[k].color}"></i>${RES[k].name}</span>`).join("")}</div>`;
   $("btn-create").onclick = createRoom;
   $("btn-join").onclick = () => {
     if (!requireNick()) return;
