@@ -108,18 +108,22 @@ console.log("开局放置完成 ✓");
 }
 
 // ---------- 随机 AI 打完整局 ----------
-let lastSig = "", stuck = 0;
+// 每个状态版本只行动一次,等广播推进后再走下一步(公网延迟下才不会拿旧状态重复发动作)
+let actedSig = null, stuck = 0;
 for (let step = 0; step < 30000; step++) {
   const g0 = clients[0].state;
   if (g0.phase === "ended") break;
-  const sig = JSON.stringify([g0.turn?.n, g0.turn?.rolled, g0.turn?.pending, g0.log.length,
-    g0.seats.map((s) => s.resCount + "," + s.devCount + "," + s.roads.length + s.villages.length + s.cities.length)]);
-  if (sig === lastSig) {
-    if (++stuck > 400) throw new Error("对局卡住:" + JSON.stringify(g0.turn));
-    await sleep(10);
+  const sig = g0.v;
+  if (sig === actedSig) {
+    if (++stuck > 600) throw new Error("对局卡住:" + JSON.stringify(g0.turn));
+    if (stuck % 300 !== 0) { await sleep(10); continue; } // 偶发丢失时 3 秒后允许重发
   } else {
     stuck = 0;
-    lastSig = sig;
+    actedSig = sig;
+    // 等三条连接都收到同一版广播,行动者才不会拿旧手牌做决策
+    try {
+      await waitFor(() => clients.every((c) => c.state.v >= g0.v), "广播收齐", 3000);
+    } catch { /* 容忍超时,按当前状态继续 */ }
   }
 
   const t = g0.turn;

@@ -21,6 +21,7 @@ export class GameRoom {
   }
 
   async commit() {
+    this.g.v = (this.g.v ?? 0) + 1; // 单调版本号:客户端用来判断广播新旧
     await this.ctx.storage.put("game", this.g);
     await this.ctx.storage.setAlarm(Date.now() + IDLE_WIPE_MS);
   }
@@ -622,6 +623,7 @@ export class GameRoom {
   personalize(viewerSeat) {
     const g = this.g;
     return {
+      v: g.v ?? 0,
       code: g.code,
       phase: g.phase,
       winVP: g.winVP,
