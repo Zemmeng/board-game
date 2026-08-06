@@ -1,0 +1,566 @@
+// 前端主逻辑:界面状态机 + WebSocket 客户端
+// 服务端是权威;这里只做展示、可点位置的预计算和动作发送
+import {
+  RES, RES_KEYS, COSTS, DEV_INFO, PIECE_LIMIT,
+  legalVillages, legalRoads, canPay, publicVP,
+  TILE_VERTICES, buildingAt,
+} from "./shared/rules.js";
+import { initBoard, updatePieces, showHighlights, clearHighlights } from "./render.js";
+
+const $ = (id) => document.getElementById(id);
+const DICE_GLYPH = ["", "⚀", "⚁", "⚂", "⚃", "⚄", "⚅"];
+
+let ws = null;
+let G = null;          // 服务端下发的(按人裁剪过的)对局状态
+let code = null;
+let mode = null;       // 当前建造模式:road | village | city | null
+let boardDrawn = false;
+let joined = false;
+let leaving = false;
+let modalKind = null;
+
+// 每个标签页一个身份令牌:刷新不掉线,同浏览器开多个标签页又能各当一个玩家
+const token = (() => {
+  let t = sessionStorage.getItem("dao-token");
+  if (!t) {
+    t = crypto.randomUUID();
+    sessionStorage.setItem("dao-token", t);
+  }
+  return t;
+})();
+
+const nickVal = () => $("nick").value.trim().slice(0, 12);
+
+// ---------- 屏幕切换与提示 ----------
+
+function show(id) {
+  for (const s of ["home", "lobby", "game"]) $(s).classList.toggle("hidden", s !== id);
+}
+
+let toastTimer = null;
+function toast(msg) {
+  const t = $("toast");
+  t.textContent = msg;
+  t.classList.remove("hidden");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.add("hidden"), 2600);
+}
+
+// ---------- 连接 ----------
+
+function connect(c) {
+  code = c.toUpperCase();
+  leaving = false;
+  const proto = location.protocol === "https:" ? "wss" : "ws";
+  ws = new WebSocket(`${proto}://${location.host}/ws?room=${code}`);
+  ws.onopen = () => send({ t: "join", token, nick: nickVal() });
+  ws.onmessage = (ev) => onMsg(JSON.parse(ev.data));
+  ws.onclose = () => {
+    if (leaving) return;
+    if (!joined) return; // 加入失败的错误已单独提示
+    toast("连接断开,正在重连…");
+    setTimeout(() => { if (!leaving) connect(code); }, 1500);
+  };
+}
+
+function send(obj) {
+  if (ws?.readyState === 1) ws.send(JSON.stringify(obj));
+}
+
+function leave() {
+  leaving = true;
+  joined = false;
+  G = null;
+  boardDrawn = false;
+  mode = null;
+  closeModal();
+  try { ws?.close(); } catch {}
+  sessionStorage.removeItem("dao-room");
+  history.replaceState(null, "", location.pathname);
+  show("home");
+}
+
+function onMsg(m) {
+  if (m.t === "joined") {
+    joined = true;
+    sessionStorage.setItem("dao-room", m.code);
+    history.replaceState(null, "", "?room=" + m.code);
+    return;
+  }
+  if (m.t === "err") {
+    if (!joined) {
+      $("home-err").textContent = m.msg;
+      leaving = true;
+      try { ws?.close(); } catch {}
+      show("home");
+    } else {
+      toast(m.msg);
+    }
+    return;
+  }
+  if (m.t === "state") {
+    G = m.g;
+    render();
+  }
+}
+
+// ---------- 总渲染 ----------
+
+function render() {
+  if (!G) return;
+  if (G.phase === "lobby") {
+    renderLobby();
+    show("lobby");
+    return;
+  }
+  show("game");
+  if (!boardDrawn) {
+    initBoard($("board"), G.board);
+    boardDrawn = true;
+  }
+  updatePieces(G);
+  renderBanner();
+  renderPlayers();
+  renderHand();
+  renderDevs();
+  renderActions();
+  renderLog();
+  updateHighlights();
+  maybeModals();
+}
+
+function renderLobby() {
+  $("lobby-code").textContent = G.code;
+  $("lobby-players").innerHTML = G.seats.map((s, i) => `
+    <li>
+      <span class="dot" style="background:${s.color}"></span>
+      <b>${esc(s.nick)}</b>${i === G.you ? "(你)" : ""}
+      ${i === G.hostSeat ? '<span class="tag">房主</span>' : ""}
+      <span class="conn ${s.connected ? "on" : ""}"></span>
+    </li>`).join("");
+  const isHost = G.you === G.hostSeat;
+  $("host-panel").classList.toggle("hidden", !isHost);
+  $("btn-start").disabled = G.seats.length < 2;
+  $("lobby-wait").textContent = isHost
+    ? (G.seats.length < 2 ? "至少 2 人才能开始" : "")
+    : "等待房主开始游戏…";
+}
+
+const myTurn = () => G.phase === "play" && G.turn.seat === G.you;
+
+function renderBanner() {
+  const b = $("banner");
+  let text = "", cls = "";
+  if (G.phase === "setup") {
+    const st = G.setup;
+    const cur = st.seq[st.idx];
+    const what = st.need === "village" ? "村庄" : "道路";
+    if (cur === G.you) { text = `开局放置:轮到你放${what},点击棋盘上的高亮位置`; cls = "mine"; }
+    else text = `开局放置:等待 ${G.seats[cur].nick} 放${what}`;
+  } else if (G.phase === "play") {
+    const t = G.turn;
+    if (t.pending?.t === "discard") {
+      const names = Object.keys(t.pending.need).map((i) => G.seats[+i].nick).join("、");
+      text = `掷出了 7!等待弃牌:${names}`;
+    } else if (t.pending?.t === "robber") {
+      if (t.seat === G.you) { text = "点击棋盘任意地格,移动强盗"; cls = "mine"; }
+      else text = `等待 ${G.seats[t.seat].nick} 移动强盗`;
+    } else if (t.seat === G.you) {
+      cls = "mine";
+      if (t.freeRoads > 0) text = `「筑路」生效:还可免费修 ${t.freeRoads} 条路,点击高亮棱边`;
+      else if (!t.rolled) text = "你的回合:请掷骰子";
+      else text = "行动阶段:建造、买发展卡、4:1 交换,完事点「结束回合」";
+    } else {
+      text = `${G.seats[t.seat].nick} 的回合`;
+    }
+  } else if (G.phase === "ended") {
+    text = `🏆 ${G.seats[G.winner].nick} 获胜!`;
+    cls = "mine";
+  }
+  b.textContent = text;
+  b.className = cls;
+
+  const t = G.turn;
+  $("dice").innerHTML = t?.dice
+    ? `<span class="die">${DICE_GLYPH[t.dice[0]]}</span><span class="die">${DICE_GLYPH[t.dice[1]]}</span> = ${t.dice[0] + t.dice[1]}`
+    : "";
+  $("btn-roll").classList.toggle("hidden", !(myTurn() && !t.rolled && !t.pending));
+}
+
+function renderPlayers() {
+  $("players").innerHTML = G.seats.map((s, i) => {
+    const active = (G.phase === "play" && G.turn.seat === i) ||
+      (G.phase === "setup" && G.setup.seq[G.setup.idx] === i);
+    let vp = String(publicVP(G, i));
+    if (i === G.you && s.devs) {
+      const hidden = s.devs.filter((d) => d.c === "vp").length;
+      if (hidden > 0) vp = `${publicVP(G, i)}+${hidden}`;
+    }
+    return `
+    <div class="player ${active ? "active" : ""}">
+      <span class="dot" style="background:${s.color}"></span>
+      <span class="pname">${esc(s.nick)}${i === G.you ? "(你)" : ""}</span>
+      <span class="conn ${s.connected ? "on" : ""}"></span>
+      <span class="badges">
+        ${G.longest.holder === i ? `<span title="最长路 ${G.longest.len} 段">🛤️</span>` : ""}
+        ${G.army.holder === i ? `<span title="最大军团">⚔️</span>` : ""}
+        ${s.knights > 0 ? `<span class="mini">⚔${s.knights}</span>` : ""}
+      </span>
+      <span class="pstat" title="手牌">🂠${s.resCount}</span>
+      <span class="pstat" title="发展卡">📜${s.devCount}</span>
+      <span class="pvp" title="分数">${vp}分</span>
+    </div>`;
+  }).join("");
+}
+
+function renderHand() {
+  if (G.you < 0) { $("hand").innerHTML = ""; return; }
+  const me = G.seats[G.you];
+  if (!me.res) { $("hand").innerHTML = ""; return; }
+  $("hand").innerHTML = `
+    <div class="hand-row">
+      ${RES_KEYS.map((k) => `
+        <span class="chip ${me.res[k] ? "" : "empty"}">
+          <i style="background:${RES[k].color}"></i>${RES[k].name} <b>${me.res[k]}</b>
+        </span>`).join("")}
+    </div>
+    <div class="bank-row">银行:${RES_KEYS.map((k) => `${RES[k].name}${G.bank?.[k] ?? "-"}`).join(" · ")} · 发展卡${G.deckCount}</div>`;
+}
+
+function devPlayable(card) {
+  if (G.phase !== "play" || !myTurn() || G.turn.pending || G.turn.devPlayed) return false;
+  if (card === "vp") return false;
+  return G.seats[G.you].devs.some((d) => d.c === card && d.t < G.turn.n);
+}
+
+function renderDevs() {
+  const el = $("devs");
+  if (G.you < 0 || !G.seats[G.you].devs?.length) { el.innerHTML = ""; return; }
+  const groups = {};
+  for (const d of G.seats[G.you].devs) groups[d.c] = (groups[d.c] ?? 0) + 1;
+  el.innerHTML = "<div class='devs-title'>我的发展卡(点击打出)</div>" +
+    Object.entries(groups).map(([c, n]) => `
+      <button class="dev-card" data-card="${c}" ${devPlayable(c) ? "" : "disabled"}
+        title="${DEV_INFO[c].desc}">${DEV_INFO[c].name} ×${n}</button>`).join("");
+  for (const btn of el.querySelectorAll(".dev-card")) {
+    btn.onclick = () => playDev(btn.dataset.card);
+  }
+}
+
+function renderActions() {
+  const played = G.phase === "play";
+  $("actions").classList.toggle("hidden", !played);
+  if (!played) return;
+  const t = G.turn;
+  const me = G.seats[G.you];
+  const ok = myTurn() && t.rolled && !t.pending;
+  const res = me?.res ?? {};
+
+  setBtn("btn-road", (ok && canPay(res, COSTS.road) && me.roads.length < PIECE_LIMIT.road && legalRoads(G, G.you).length > 0) || (myTurn() && t.freeRoads > 0));
+  setBtn("btn-village", ok && canPay(res, COSTS.village) && me.villages.length < PIECE_LIMIT.village && legalVillages(G, G.you).length > 0);
+  setBtn("btn-city", ok && canPay(res, COSTS.city) && me.villages.length > 0 && me.cities.length < PIECE_LIMIT.city);
+  setBtn("btn-buydev", ok && canPay(res, COSTS.dev) && G.deckCount > 0);
+  setBtn("btn-trade", ok && RES_KEYS.some((k) => res[k] >= 4));
+  setBtn("btn-end", ok);
+
+  for (const id of ["btn-road", "btn-village", "btn-city"]) {
+    $(id).classList.toggle("active", mode === $(id).dataset.mode);
+  }
+}
+
+function setBtn(id, enabled) { $(id).disabled = !enabled; }
+
+function renderLog() {
+  const el = $("log");
+  el.innerHTML = (G.log ?? []).slice(-40).map((l) => `<div>${esc(l)}</div>`).join("");
+  el.scrollTop = el.scrollHeight;
+}
+
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+// ---------- 高亮与点击 ----------
+
+function updateHighlights() {
+  clearHighlights();
+  if (!G || G.you < 0) return;
+
+  if (G.phase === "setup") {
+    const st = G.setup;
+    if (st.seq[st.idx] !== G.you) return;
+    if (st.need === "village") {
+      showHighlights(legalVillages(G, G.you), "vertex", (id) => send({ t: "place", id }));
+    } else {
+      showHighlights(legalRoads(G, G.you), "edge", (id) => send({ t: "place", id }));
+    }
+    return;
+  }
+  if (G.phase !== "play") return;
+  const t = G.turn;
+
+  if (t.pending?.t === "robber" && t.seat === G.you) {
+    const tiles = G.board.tiles.filter((x) => x.k !== G.board.robber).map((x) => x.k);
+    showHighlights(tiles, "tile", pickRobberTile);
+    return;
+  }
+  if (!myTurn() || t.pending) { mode = null; return; }
+  if (t.freeRoads > 0) mode = "road";
+  if (!mode) return;
+  if (!t.rolled && !(mode === "road" && t.freeRoads > 0)) return;
+
+  if (mode === "road") {
+    showHighlights(legalRoads(G, G.you), "edge", (id) => send({ t: "build", kind: "road", id }));
+  } else if (mode === "village") {
+    showHighlights(legalVillages(G, G.you), "vertex", (id) => send({ t: "build", kind: "village", id }));
+  } else if (mode === "city") {
+    showHighlights(G.seats[G.you].villages, "vertex", (id) => send({ t: "build", kind: "city", id }));
+  }
+}
+
+function pickRobberTile(tk) {
+  const victims = [];
+  for (const vid of TILE_VERTICES.get(tk)) {
+    const b = buildingAt(G, vid);
+    if (b && b.seat !== G.you && G.seats[b.seat].resCount > 0 && !victims.includes(b.seat)) {
+      victims.push(b.seat);
+    }
+  }
+  if (victims.length === 0) send({ t: "robber", tile: tk, victim: null });
+  else if (victims.length === 1) send({ t: "robber", tile: tk, victim: victims[0] });
+  else openVictimModal(tk, victims);
+}
+
+function playDev(card) {
+  if (card === "monopoly") return openResPickModal("垄断:选择要收走的资源", (k) => {
+    send({ t: "play_dev", card, res: k });
+  });
+  if (card === "invent") return openInventModal();
+  send({ t: "play_dev", card }); // knight / roads
+}
+
+// ---------- 弹窗 ----------
+
+function openModal(kind, html) {
+  modalKind = kind;
+  $("modal").innerHTML = html;
+  $("modal-layer").classList.remove("hidden");
+}
+
+function closeModal() {
+  modalKind = null;
+  $("modal-layer").classList.add("hidden");
+  $("modal").innerHTML = "";
+}
+
+function maybeModals() {
+  const t = G.turn;
+  const needMine = t?.pending?.t === "discard" && t.pending.need[G.you] != null;
+  if (needMine && modalKind !== "discard") openDiscardModal(t.pending.need[G.you]);
+  if (!needMine && modalKind === "discard") closeModal();
+  if (G.phase === "ended" && modalKind !== "result") openResultModal();
+}
+
+function openDiscardModal(need) {
+  const me = G.seats[G.you];
+  const sel = Object.fromEntries(RES_KEYS.map((k) => [k, 0]));
+  openModal("discard", `
+    <h3>掷出了 7:请弃掉 ${need} 张手牌</h3>
+    ${RES_KEYS.filter((k) => me.res[k] > 0).map((k) => `
+      <div class="pick-row" data-res="${k}">
+        <span class="chip"><i style="background:${RES[k].color}"></i>${RES[k].name}(有 ${me.res[k]})</span>
+        <span class="stepper">
+          <button class="minus">−</button><b class="n">0</b><button class="plus">＋</button>
+        </span>
+      </div>`).join("")}
+    <p class="modal-status"><span id="disc-sum">0</span> / ${need}</p>
+    <button id="disc-ok" class="primary big" disabled>确认弃牌</button>`);
+  const refresh = () => {
+    let sum = 0;
+    for (const row of $("modal").querySelectorAll(".pick-row")) {
+      const k = row.dataset.res;
+      row.querySelector(".n").textContent = sel[k];
+      sum += sel[k];
+    }
+    $("disc-sum").textContent = sum;
+    $("disc-ok").disabled = sum !== need;
+  };
+  for (const row of $("modal").querySelectorAll(".pick-row")) {
+    const k = row.dataset.res;
+    row.querySelector(".plus").onclick = () => { if (sel[k] < me.res[k]) { sel[k]++; refresh(); } };
+    row.querySelector(".minus").onclick = () => { if (sel[k] > 0) { sel[k]--; refresh(); } };
+  }
+  $("disc-ok").onclick = () => { send({ t: "discard", give: sel }); closeModal(); };
+}
+
+function openVictimModal(tile, victims) {
+  openModal("victim", `
+    <h3>选择偷取对象</h3>
+    ${victims.map((i) => `
+      <button class="victim big" data-seat="${i}">
+        <span class="dot" style="background:${G.seats[i].color}"></span>
+        ${esc(G.seats[i].nick)}(${G.seats[i].resCount} 张手牌)
+      </button>`).join("")}`);
+  for (const btn of $("modal").querySelectorAll(".victim")) {
+    btn.onclick = () => { send({ t: "robber", tile, victim: +btn.dataset.seat }); closeModal(); };
+  }
+}
+
+function openResPickModal(title, cb) {
+  openModal("respick", `
+    <h3>${title}</h3>
+    <div class="res-pick">${RES_KEYS.map((k) => `
+      <button class="chip big" data-res="${k}"><i style="background:${RES[k].color}"></i>${RES[k].name}</button>`).join("")}
+    </div>
+    <button id="rp-cancel" class="linkish">取消</button>`);
+  for (const btn of $("modal").querySelectorAll("[data-res]")) {
+    btn.onclick = () => { cb(btn.dataset.res); closeModal(); };
+  }
+  $("rp-cancel").onclick = closeModal;
+}
+
+function openInventModal() {
+  const sel = [];
+  openModal("invent", `
+    <h3>丰收:从银行任取 2 张</h3>
+    <div class="res-pick">${RES_KEYS.map((k) => `
+      <button class="chip big" data-res="${k}"><i style="background:${RES[k].color}"></i>${RES[k].name}(银行 ${G.bank[k]})</button>`).join("")}
+    </div>
+    <p class="modal-status" id="inv-sel">已选:—</p>
+    <button id="inv-ok" class="primary big" disabled>确认</button>
+    <button id="inv-cancel" class="linkish">取消</button>`);
+  const refresh = () => {
+    $("inv-sel").textContent = "已选:" + (sel.map((k) => RES[k].name).join("、") || "—");
+    $("inv-ok").disabled = sel.length !== 2;
+  };
+  for (const btn of $("modal").querySelectorAll("[data-res]")) {
+    btn.onclick = () => {
+      const k = btn.dataset.res;
+      if (sel.length >= 2) sel.length = 0;
+      sel.push(k);
+      refresh();
+    };
+  }
+  $("inv-ok").onclick = () => { send({ t: "play_dev", card: "invent", res: sel[0], res2: sel[1] }); closeModal(); };
+  $("inv-cancel").onclick = closeModal;
+}
+
+function openTradeModal() {
+  const me = G.seats[G.you];
+  let give = null, get = null;
+  openModal("trade", `
+    <h3>4:1 银行交换</h3>
+    <p>付出 4 张:</p>
+    <div class="res-pick" id="tr-give">${RES_KEYS.filter((k) => me.res[k] >= 4).map((k) => `
+      <button class="chip big" data-res="${k}"><i style="background:${RES[k].color}"></i>${RES[k].name}(有 ${me.res[k]})</button>`).join("")}
+    </div>
+    <p>换取 1 张:</p>
+    <div class="res-pick" id="tr-get">${RES_KEYS.map((k) => `
+      <button class="chip big" data-res="${k}"><i style="background:${RES[k].color}"></i>${RES[k].name}(银行 ${G.bank[k]})</button>`).join("")}
+    </div>
+    <button id="tr-ok" class="primary big" disabled>确认交换</button>
+    <button id="tr-cancel" class="linkish">取消</button>`);
+  const refresh = () => {
+    for (const btn of $("tr-give").querySelectorAll("[data-res]")) btn.classList.toggle("sel", btn.dataset.res === give);
+    for (const btn of $("tr-get").querySelectorAll("[data-res]")) btn.classList.toggle("sel", btn.dataset.res === get);
+    $("tr-ok").disabled = !(give && get && give !== get && G.bank[get] > 0);
+  };
+  for (const btn of $("tr-give").querySelectorAll("[data-res]")) btn.onclick = () => { give = btn.dataset.res; refresh(); };
+  for (const btn of $("tr-get").querySelectorAll("[data-res]")) btn.onclick = () => { get = btn.dataset.res; refresh(); };
+  $("tr-ok").onclick = () => { send({ t: "bank_trade", give, get }); closeModal(); };
+  $("tr-cancel").onclick = closeModal;
+}
+
+function openResultModal() {
+  const rows = [...G.result].sort((a, b) => b.vp - a.vp);
+  openModal("result", `
+    <h3>🏆 ${esc(G.seats[G.winner].nick)} 获胜!</h3>
+    <table class="result">
+      <tr><th></th><th>村</th><th>城</th><th>胜利点卡</th><th>称号</th><th>总分</th></tr>
+      ${rows.map((r) => `
+        <tr>
+          <td><span class="dot" style="background:${r.color}"></span>${esc(r.nick)}</td>
+          <td>${r.villages}</td><td>${r.cities}</td><td>${r.vpCards}</td>
+          <td>${r.longest ? "🛤️" : ""}${r.army ? "⚔️" : ""}</td>
+          <td><b>${r.vp}</b></td>
+        </tr>`).join("")}
+    </table>
+    <button id="res-close" class="linkish">继续观看棋盘</button>
+    <button id="res-leave" class="primary big">回到首页</button>`);
+  $("res-close").onclick = closeModal;
+  $("res-leave").onclick = () => { closeModal(); leave(); };
+}
+
+// ---------- 首页交互 ----------
+
+async function createRoom() {
+  if (!requireNick()) return;
+  $("btn-create").disabled = true;
+  try {
+    const res = await fetch("/api/create", {
+      method: "POST",
+      body: JSON.stringify({ hostToken: token }),
+    });
+    if (!res.ok) throw new Error("建房失败,稍后再试");
+    const { code: c } = await res.json();
+    connect(c);
+  } catch (e) {
+    $("home-err").textContent = e.message;
+  } finally {
+    $("btn-create").disabled = false;
+  }
+}
+
+function requireNick() {
+  if (!nickVal()) {
+    $("home-err").textContent = "先给自己起个昵称";
+    $("nick").focus();
+    return false;
+  }
+  localStorage.setItem("dao-nick", nickVal());
+  $("home-err").textContent = "";
+  return true;
+}
+
+function init() {
+  $("nick").value = localStorage.getItem("dao-nick") ?? "";
+  $("btn-create").onclick = createRoom;
+  $("btn-join").onclick = () => {
+    if (!requireNick()) return;
+    const c = $("join-code").value.trim().toUpperCase();
+    if (!/^[A-Z2-9]{5}$/.test(c)) { $("home-err").textContent = "房间码是 5 位字母数字"; return; }
+    connect(c);
+  };
+  $("join-code").addEventListener("keydown", (e) => { if (e.key === "Enter") $("btn-join").click(); });
+  $("btn-leave").onclick = leave;
+  $("btn-start").onclick = () => send({ t: "start", winVP: +$("win-vp").value });
+  $("btn-roll").onclick = () => send({ t: "roll" });
+  $("btn-end").onclick = () => { mode = null; send({ t: "end" }); };
+  $("btn-buydev").onclick = () => send({ t: "buy_dev" });
+  $("btn-trade").onclick = openTradeModal;
+  for (const id of ["btn-road", "btn-village", "btn-city"]) {
+    $(id).onclick = () => {
+      const m = $(id).dataset.mode;
+      mode = mode === m ? null : m;
+      renderActions();
+      updateHighlights();
+    };
+  }
+  $("chat").addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && $("chat").value.trim()) {
+      send({ t: "chat", text: $("chat").value });
+      $("chat").value = "";
+    }
+  });
+
+  // 带 ?room= 的链接:回填房间码;若本标签页此前就在这个房间,直接重连
+  const room = new URLSearchParams(location.search).get("room");
+  if (room) {
+    $("join-code").value = room.toUpperCase();
+    if (sessionStorage.getItem("dao-room") === room.toUpperCase() && nickVal()) {
+      connect(room);
+    }
+  }
+}
+
+init();

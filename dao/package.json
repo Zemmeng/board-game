@@ -1,6 +1,7 @@
 {
   "name": "dao",
   "private": true,
+  "type": "module",
   "description": "仄梦的岛屿开拓——六边形资源开拓联机桌游",
   "scripts": {
     "dev": "wrangler dev",

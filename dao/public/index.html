@@ -4,11 +4,82 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>仄梦的岛屿开拓</title>
-  <style>
-    body { font-family: system-ui, sans-serif; display: grid; place-items: center; min-height: 100vh; margin: 0; background: #0e2a3a; color: #f2e8d5; }
-  </style>
+  <meta name="description" content="仄梦的岛屿开拓——2~4 人六边形资源开拓联机桌游,和朋友在浏览器里玩">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><polygon points='50,5 93,28 93,72 50,95 7,72 7,28' fill='%232e7d46' stroke='%23f2e8d5' stroke-width='6'/></svg>">
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <h1>仄梦的岛屿开拓 · 建设中</h1>
+
+  <!-- 首页 -->
+  <section id="home" class="screen">
+    <div class="card">
+      <h1>仄梦的岛屿开拓</h1>
+      <p class="tagline">六边形资源开拓联机桌游 · 2~4 人 · 和朋友开房间玩</p>
+      <input id="nick" maxlength="12" placeholder="你的昵称" autocomplete="off">
+      <button id="btn-create" class="primary big">创建房间</button>
+      <div class="join-row">
+        <input id="join-code" maxlength="5" placeholder="房间码" autocomplete="off">
+        <button id="btn-join" class="big">加入房间</button>
+      </div>
+      <p id="home-err" class="err"></p>
+    </div>
+  </section>
+
+  <!-- 大厅 -->
+  <section id="lobby" class="screen hidden">
+    <div class="card">
+      <h2>房间码 <span id="lobby-code" class="room-code"></span></h2>
+      <p class="hint">把房间码或本页链接发给朋友即可加入(2~4 人)</p>
+      <ul id="lobby-players"></ul>
+      <div id="host-panel" class="hidden">
+        <label class="vp-label">目标分数
+          <select id="win-vp">
+            <option value="10">10 分(标准)</option>
+            <option value="8">8 分(快局)</option>
+          </select>
+        </label>
+        <button id="btn-start" class="primary big">开始游戏</button>
+      </div>
+      <p id="lobby-wait" class="hint"></p>
+      <button id="btn-leave" class="linkish">离开房间</button>
+    </div>
+  </section>
+
+  <!-- 对局 -->
+  <section id="game" class="screen hidden">
+    <div id="board-wrap">
+      <svg id="board" preserveAspectRatio="xMidYMid meet"></svg>
+    </div>
+    <aside id="side">
+      <div id="banner"></div>
+      <div id="dice-row">
+        <span id="dice"></span>
+        <button id="btn-roll" class="primary hidden">掷骰子</button>
+      </div>
+      <div id="players"></div>
+      <div id="hand"></div>
+      <div id="devs"></div>
+      <div id="actions">
+        <button id="btn-road" data-mode="road">建路</button>
+        <button id="btn-village" data-mode="village">建村</button>
+        <button id="btn-city" data-mode="city">升城</button>
+        <button id="btn-buydev">买发展卡</button>
+        <button id="btn-trade">4:1 交换</button>
+        <button id="btn-end" class="warn">结束回合</button>
+      </div>
+      <div id="log"></div>
+      <div id="chat-row">
+        <input id="chat" maxlength="120" placeholder="聊两句…" autocomplete="off">
+      </div>
+    </aside>
+  </section>
+
+  <!-- 弹窗 -->
+  <div id="modal-layer" class="hidden">
+    <div id="modal" class="card"></div>
+  </div>
+  <div id="toast" class="hidden"></div>
+
+  <script type="module" src="js/app.js"></script>
 </body>
 </html>
