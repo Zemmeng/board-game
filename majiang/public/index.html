@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>川麻 · 血战到底</title>
+  <meta name="description" content="四川麻将血战到底:108 张无字牌,定缺、换三张、刮风下雨,胡了不停继续打到只剩一家。四人联机,人不够加机器人。">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='16' fill='%231d5537'/><rect x='26' y='16' width='48' height='68' rx='9' fill='%23fffdf6' stroke='%23b9ac90' stroke-width='3'/><circle cx='50' cy='40' r='9' fill='none' stroke='%2320548c' stroke-width='4'/><circle cx='50' cy='40' r='4' fill='%2320548c'/><text x='50' y='76' font-size='26' text-anchor='middle' fill='%23c0392b' font-weight='700'>万</text></svg>">
+  <meta property="og:title" content="川麻 · 血战到底">
+  <meta property="og:description" content="定缺、换三张、刮风下雨,胡了继续打到只剩一家。四人联机。">
+  <meta property="og:image" content="https://majiang.wawazhiliao.com/img/cover.jpg">
+  <meta property="og:url" content="https://majiang.wawazhiliao.com">
+  <meta name="twitter:card" content="summary_large_image">
+  <!-- 改 CSS/JS 后把 ?v= 都 +1 -->
+  <link rel="stylesheet" href="style.css?v=2">
+</head>
+<body>
+
+  <!-- 首页 -->
+  <section id="home" class="screen">
+    <div class="card">
+      <h1>川麻<span class="sub">血战到底</span></h1>
+      <p class="tagline">108 张无字牌 · 定缺 · 换三张 · 胡了不停,打到只剩一家</p>
+      <input id="nick" maxlength="10" placeholder="你的名号" autocomplete="off">
+      <button id="btn-create" class="primary big">开一桌</button>
+      <div class="join-row">
+        <input id="join-code" maxlength="5" placeholder="房间码" autocomplete="off">
+        <button id="btn-join" class="big">加入</button>
+      </div>
+      <p id="home-err" class="err"></p>
+      <p class="hint">
+        自摸 ×2 · 大对 ×2 · 碰碰胡 ×2 · 清一色 ×4 · 七对 ×4 · 每根 ×2 · 封顶 32 倍<br>
+        流局查花猪、查大叫
+      </p>
+      <p class="hint"><a href="https://games.wawazhiliao.com">← 返回游戏合集</a></p>
+    </div>
+  </section>
+
+  <!-- 等人 -->
+  <section id="lobby" class="screen hidden">
+    <div class="card">
+      <h2>房间码 <span id="lobby-code" class="room-code"></span></h2>
+      <p class="hint">把房间码或本页链接发给牌友,凑齐四个人就能开</p>
+      <ul id="lobby-seats"></ul>
+      <div id="host-panel" class="hidden row">
+        <button id="btn-addbot">🀄 加机器人</button>
+        <button id="btn-start" class="primary big">开局</button>
+      </div>
+      <p id="lobby-wait" class="hint"></p>
+      <button id="btn-leave" class="linkish">离开</button>
+    </div>
+  </section>
+
+  <!-- 牌桌 -->
+  <section id="table" class="screen hidden">
+    <div id="felt">
+      <div class="opp" id="opp-2"></div>
+      <div class="opp side" id="opp-1"></div>
+      <div class="opp side" id="opp-3"></div>
+
+      <div id="center">
+        <div id="wall-info"></div>
+        <div id="banner"></div>
+        <div id="river"></div>
+      </div>
+
+      <div id="mine">
+        <div id="my-melds"></div>
+        <div id="my-hand"></div>
+        <div id="my-info"></div>
+      </div>
+
+      <div id="acts"></div>
+      <div id="phase-panel" class="hidden"></div>
+      <button id="btn-quit" title="退出">✕</button>
+      <button id="btn-music" title="背景音乐">♪</button>
+    </div>
+    <div id="log"></div>
+  </section>
+
+  <div id="modal-layer" class="hidden"><div id="modal" class="card"></div></div>
+  <div id="toast" class="hidden"></div>
+
+  <script type="module" src="js/app.js?v=1"></script>
+</body>
+</html>
