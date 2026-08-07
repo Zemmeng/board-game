@@ -50,13 +50,14 @@
   <section id="game" class="screen hidden">
     <div id="board-wrap">
       <svg id="board" preserveAspectRatio="xMidYMid meet"></svg>
+      <div id="board-dice" class="hidden">
+        <div class="bdie" id="bdie1"></div>
+        <div class="bdie" id="bdie2"></div>
+        <div id="bdice-sum">?</div>
+      </div>
     </div>
     <aside id="side">
       <div id="banner"></div>
-      <div id="dice-row">
-        <span id="dice"></span>
-        <button id="btn-roll" class="primary hidden">掷骰子</button>
-      </div>
       <div id="players"></div>
       <div id="hand"></div>
       <div id="devs"></div>

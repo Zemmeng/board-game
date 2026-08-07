@@ -5,10 +5,11 @@ import {
   legalVillages, legalRoads, canPay, publicVP, getRates,
   TILE_VERTICES, buildingAt,
 } from "./shared/rules.js";
-import { initBoard, updatePieces, showHighlights, clearHighlights, flashTiles } from "./render.js";
+import { initBoard, updatePieces, showHighlights, clearHighlights, flashTiles, markProduced } from "./render.js";
 
 const $ = (id) => document.getElementById(id);
-const DICE_GLYPH = ["", "⚀", "⚁", "⚂", "⚃", "⚄", "⚅"];
+// 骰子点位:3×3 网格里亮哪些格
+const PIP_MAP = { 1: [4], 2: [0, 8], 3: [0, 4, 8], 4: [0, 2, 6, 8], 5: [0, 2, 4, 6, 8], 6: [0, 2, 3, 5, 6, 8] };
 
 let ws = null;
 let G = null;          // 服务端下发的(按人裁剪过的)对局状态
@@ -108,39 +109,92 @@ function onMsg(m) {
     render();
     if (justRolled) {
       const [d1, d2] = G.turn.dice;
-      animateDice(d1, d2);
-      if (d1 + d2 !== 7) {
-        const keys = G.board.tiles
-          .filter((t) => t.num === d1 + d2 && t.k !== G.board.robber)
-          .map((t) => t.k);
-        setTimeout(() => flashTiles(keys), 650);
-      }
+      rollBoardDice(d1, d2, () => {
+        const sum = d1 + d2;
+        if (sum !== 7 && G?.board) {
+          flashTiles(G.board.tiles
+            .filter((t) => t.num === sum && t.k !== G.board.robber)
+            .map((t) => t.k));
+        }
+        updateProducedFx();
+      });
     }
-    animateGains(prev, G, justRolled ? 800 : 0);
+    animateGains(prev, G, justRolled ? 1100 : 0);
   }
 }
 
-// ---------- 动画 ----------
+// ---------- 骰子(盘面大骰子)与产出特效 ----------
 
 let diceAnimating = false;
 let diceTimer = null;
 
-function animateDice(d1, d2) {
-  const el = $("dice");
-  const t0 = Date.now();
-  el.classList.add("rolling");
+function setDie(el, v) {
+  el.innerHTML = [...Array(9)]
+    .map((_, i) => `<i class="${PIP_MAP[v].includes(i) ? "on" : ""}"></i>`)
+    .join("");
+}
+
+function showBoardDice(d1, d2) {
+  $("board-dice").classList.remove("hidden");
+  setDie($("bdie1"), d1);
+  setDie($("bdie2"), d2);
+  const sum = $("bdice-sum");
+  sum.textContent = d1 + d2;
+  sum.classList.toggle("seven", d1 + d2 === 7);
+}
+
+function rollBoardDice(d1, d2, onDone) {
+  const bd = $("board-dice");
+  bd.classList.remove("hidden", "settle");
+  bd.classList.add("rolling");
+  $("bdice-sum").textContent = "?";
+  $("bdice-sum").classList.remove("seven");
   clearInterval(diceTimer);
+  const t0 = Date.now();
   diceTimer = setInterval(() => {
-    if (Date.now() - t0 > 620) {
+    if (Date.now() - t0 > 850) {
       clearInterval(diceTimer);
-      el.classList.remove("rolling");
+      bd.classList.remove("rolling");
+      bd.classList.add("settle");
+      showBoardDice(d1, d2);
       diceAnimating = false;
-      el.innerHTML = `<span class="die">${DICE_GLYPH[d1]}</span><span class="die">${DICE_GLYPH[d2]}</span> = ${d1 + d2}`;
+      onDone?.();
       return;
     }
-    const r = () => DICE_GLYPH[1 + Math.floor(Math.random() * 6)];
-    el.innerHTML = `<span class="die">${r()}</span><span class="die">${r()}</span>`;
-  }, 75);
+    setDie($("bdie1"), 1 + Math.floor(Math.random() * 6));
+    setDie($("bdie2"), 1 + Math.floor(Math.random() * 6));
+  }, 80);
+}
+
+// 本轮产出的地格保留持续的金边呼吸特效,下一次掷骰前一直亮着
+function updateProducedFx() {
+  if (!G || G.phase !== "play" || !G.turn?.rolled || !G.turn.dice) { markProduced([]); return; }
+  const sum = G.turn.dice[0] + G.turn.dice[1];
+  if (sum === 7) { markProduced([]); return; }
+  markProduced(G.board.tiles
+    .filter((t) => t.num === sum && t.k !== G.board.robber)
+    .map((t) => t.k));
+}
+
+// 自动掷骰:轮到自己且未掷时,短暂停顿后自动掷(留出掷前打发展卡的窗口)
+let autoRollTimer = null;
+let autoRollSentFor = -1;
+
+function armAutoRoll() {
+  const should = G?.phase === "play" && myTurn() && !G.turn.rolled && !G.turn.pending && G.winner === null;
+  if (!should) {
+    clearTimeout(autoRollTimer);
+    autoRollTimer = null;
+    return;
+  }
+  if (autoRollTimer || autoRollSentFor === G.turn.n) return;
+  autoRollTimer = setTimeout(function fire() {
+    autoRollTimer = null;
+    if (!(G?.phase === "play" && myTurn() && !G.turn.rolled && !G.turn.pending)) return;
+    if (modalKind) { autoRollTimer = setTimeout(fire, 800); return; } // 弹窗开着先不掷
+    autoRollSentFor = G.turn.n;
+    send({ t: "roll" });
+  }, 1500);
 }
 
 // 自己的手牌涨了:芯片弹跳 + 飘"+n";别人的手牌数涨了:计数弹一下
@@ -200,6 +254,8 @@ function render() {
   renderActions();
   renderLog();
   updateHighlights();
+  if (!diceAnimating) updateProducedFx();
+  armAutoRoll();
   maybeModals();
 }
 
@@ -248,7 +304,7 @@ function renderBanner() {
     } else if (t.seat === G.you) {
       cls = "mine";
       if (t.freeRoads > 0) text = `「筑路」生效:还可免费修 ${t.freeRoads} 条路,点击高亮棱边`;
-      else if (!t.rolled) text = "你的回合:请掷骰子";
+      else if (!t.rolled) text = "你的回合,自动掷骰中…(想抢先打发展卡就趁现在)";
       else text = "行动阶段:建造、买卡、交易或兑换,完事点「结束回合」";
     } else {
       text = `${G.seats[t.seat].nick} 的回合`;
@@ -260,13 +316,10 @@ function renderBanner() {
   b.textContent = text;
   b.className = cls;
 
-  const t = G.turn;
   if (!diceAnimating) {
-    $("dice").innerHTML = t?.dice
-      ? `<span class="die">${DICE_GLYPH[t.dice[0]]}</span><span class="die">${DICE_GLYPH[t.dice[1]]}</span> = ${t.dice[0] + t.dice[1]}`
-      : "";
+    if (G.phase !== "lobby" && G.turn?.dice) showBoardDice(G.turn.dice[0], G.turn.dice[1]);
+    else $("board-dice").classList.add("hidden");
   }
-  $("btn-roll").classList.toggle("hidden", !(myTurn() && !t.rolled && !t.pending));
 }
 
 function renderPlayers() {
@@ -749,7 +802,6 @@ function init() {
   $("btn-leave").onclick = leave;
   $("btn-addbot").onclick = () => send({ t: "add_bot" });
   $("btn-start").onclick = () => send({ t: "start", winVP: +$("win-vp").value });
-  $("btn-roll").onclick = () => send({ t: "roll" });
   $("btn-end").onclick = () => { mode = null; send({ t: "end" }); };
   $("btn-trade").onclick = openTradeModal;
   $("btn-offer").onclick = openOfferModal;

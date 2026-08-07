@@ -23,7 +23,7 @@ export function initBoard(svgEl, board) {
   svg.innerHTML = "";
   svg.setAttribute("viewBox", "-272 -260 544 520");
   layers = {};
-  for (const name of ["tiles", "pieces", "robber", "fx", "hl"]) {
+  for (const name of ["tiles", "produced", "pieces", "robber", "fx", "hl"]) {
     layers[name] = el("g", { class: "layer-" + name }, svg);
   }
 
@@ -124,6 +124,18 @@ export function updatePieces(g) {
 
 export function clearHighlights() {
   if (layers.hl) layers.hl.innerHTML = "";
+}
+
+// 本轮产出的地格:持续的金边呼吸特效(传空数组清除)
+export function markProduced(keys) {
+  if (!layers.produced) return;
+  layers.produced.innerHTML = "";
+  for (const k of keys) {
+    const pts = TILE_VERTICES.get(k)
+      .map((vid) => { const p = px(VERTICES.get(vid)); return `${p.x.toFixed(1)},${p.y.toFixed(1)}`; })
+      .join(" ");
+    el("polygon", { points: pts, class: "fx-produced" }, layers.produced);
+  }
 }
 
 // 产出时给对应地格打一道渐隐高光

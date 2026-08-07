@@ -143,13 +143,48 @@ input, select {
 }
 #banner { font-size: 15px; min-height: 40px; padding: 8px 10px; border-radius: 8px; background: #10344a; }
 #banner.mine { background: #7a5a1d; color: #ffe9b0; font-weight: 700; }
-#dice-row { display: flex; align-items: center; gap: 12px; min-height: 40px; }
-.die { font-size: 34px; line-height: 1; display: inline-block; }
-#dice.rolling .die { animation: dice-shake 0.15s ease-in-out infinite; }
-#dice.rolling .die:last-child { animation-delay: 0.07s; }
-@keyframes dice-shake {
-  0%, 100% { transform: rotate(-10deg) translateY(0); }
-  50% { transform: rotate(12deg) translateY(-4px); }
+/* 盘面大骰子 */
+#board-dice {
+  position: absolute; top: 16px; left: 16px;
+  display: flex; align-items: center; gap: 12px;
+  z-index: 5; pointer-events: none;
+}
+.bdie {
+  width: 54px; height: 54px;
+  background: #faf6ec;
+  border: 2px solid #b09a6a;
+  border-radius: 13px;
+  box-shadow: 0 5px 16px rgba(0, 0, 0, 0.45);
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+  gap: 2px;
+  padding: 8px;
+}
+.bdie i { border-radius: 50%; }
+.bdie i.on { background: #2a2018; }
+#bdice-sum {
+  min-width: 50px; height: 50px;
+  border-radius: 50%;
+  background: #c78f3d; color: #24170a;
+  font-size: 27px; font-weight: 800;
+  display: grid; place-items: center;
+  box-shadow: 0 5px 16px rgba(0, 0, 0, 0.45);
+}
+#bdice-sum.seven { background: #b03a2e; color: #fff; }
+#board-dice.rolling .bdie { animation: bdie-shake 0.18s ease-in-out infinite; }
+#board-dice.rolling .bdie:last-of-type { animation-delay: 0.09s; }
+@keyframes bdie-shake {
+  0%, 100% { transform: rotate(-9deg) translateY(0); }
+  50% { transform: rotate(11deg) translateY(-6px); }
+}
+#board-dice.settle .bdie, #board-dice.settle #bdice-sum { animation: settle-pop 0.5s ease; }
+@keyframes settle-pop {
+  40% { transform: scale(1.22); }
+}
+@media (max-width: 760px) {
+  .bdie { width: 42px; height: 42px; padding: 6px; }
+  #bdice-sum { min-width: 40px; height: 40px; font-size: 22px; }
 }
 #players { display: flex; flex-direction: column; gap: 4px; }
 .player {
@@ -216,6 +251,16 @@ input, select {
 .road { stroke-width: 7; stroke-linecap: round; }
 .building { stroke: #1d1610; stroke-width: 1.6; stroke-linejoin: round; }
 .robber-body { fill: #2b2b33; stroke: #f2e8d5; stroke-width: 1.5; opacity: 0.95; }
+
+.fx-produced {
+  fill: rgba(255, 217, 122, 0.13);
+  stroke: #ffd97a; stroke-width: 3.5; stroke-linejoin: round;
+  pointer-events: none;
+  animation: produced-pulse 1.7s ease-in-out infinite;
+}
+@keyframes produced-pulse {
+  50% { opacity: 0.4; }
+}
 
 .fx-flash {
   fill: #fff3c4; stroke: #ffd97a; stroke-width: 4; stroke-linejoin: round;
