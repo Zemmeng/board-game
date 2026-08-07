@@ -249,6 +249,15 @@ input, select {
 @keyframes ripple-out { from { opacity: 0.6; transform: scale(0); } to { opacity: 0; transform: scale(1); } }
 .fx-ripple { position: absolute; inset: -45%; border-radius: 50%; animation: ripple-out 0.85s ease-out forwards; }
 
+#btn-sound {
+  position: fixed; top: 10px; right: 10px; z-index: 60;
+  width: 38px; height: 38px; padding: 0; border-radius: 50%;
+  font-size: 17px; line-height: 1;
+  background: rgba(8, 22, 16, 0.62); color: #f2e8d5;
+  box-shadow: 0 0 0 1px rgba(246, 238, 216, 0.25);
+}
+#btn-sound.off { opacity: 0.55; }
+
 /* 窄屏:桌子压扁、座位牌缩小(不然左右两位会被挤出屏幕)、信息栏挪到桌子下沿居中 */
 @media (max-width: 700px) {
   #felt { min-height: 318px; padding: 10px; }

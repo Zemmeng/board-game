@@ -1,4 +1,6 @@
 // 「余一」前端:界面状态机 + WebSocket 客户端(服务端权威,这里只做展示与动作发送)
+import { sfx, ensure as sfxEnsure, isMuted, setMuted } from "./sfx.js?v=3";
+
 const $ = (id) => document.getElementById(id);
 
 const COLORS = ["r", "y", "g", "b"];
@@ -122,7 +124,7 @@ function onMsg(m) {
 // 服务端每次推 state 都整体重渲染,所以动画一律靠「新旧状态对比」触发:
 // 先在 render() 开头算出这一帧该放什么,渲染完再把 class 挂到新生成的节点上。
 
-const fxPrev = { hand: null, color: null, round: null, counts: null };
+const fxPrev = { hand: null, color: null, round: null, counts: null, myTurn: false, phase: null };
 
 function fxAdd(node, ms) {
   $("fx").appendChild(node);
@@ -169,7 +171,9 @@ function render() {
   const dealing = handLen !== null && (fxPrev.hand === null || G.round !== fxPrev.round);
   const drew = !dealing && handLen !== null && fxPrev.hand !== null
     ? Math.max(0, handLen - fxPrev.hand) : 0;
-  const colorChanged = fxPrev.color && G.color && G.color !== fxPrev.color;
+  // 只有万能牌指定新颜色才算「换色」;普通牌打出不同花色也会改 G.color,
+  // 那种每手都响涟漪和磬声就太吵了
+  const colorChanged = fxPrev.color && G.color && G.color !== fxPrev.color && isWild(G.pileTop);
   const wentUno = fxPrev.counts && counts.some((n, i) => n === 1 && fxPrev.counts[i] !== 1);
 
   renderPlayers();
@@ -183,17 +187,25 @@ function render() {
   const hand = [...$("hand").children];
   if (dealing) {
     hand.forEach((el, i) => { el.style.setProperty("--i", i); el.classList.add("deal"); });
+    sfx.deal(hand.length);
   } else if (drew > 0) {
     hand.slice(-drew).forEach((el, i) => { el.style.setProperty("--i", i); el.classList.add("flip"); });
-    if (drew >= 2) jolt("hand", "tremble", 420); // 被抓 / 吃罚牌
+    if (drew >= 2) { jolt("hand", "tremble", 420); sfx.penalty(); } // 被抓 / 吃罚牌
+    else sfx.draw();
   }
-  if (colorChanged) ripple(COLOR_INFO[G.color]?.hex ?? "#f4ead3");
-  if (wentUno) sealDrop();
+  if (colorChanged) { ripple(COLOR_INFO[G.color]?.hex ?? "#f4ead3"); sfx.chime(); }
+  if (wentUno) { sealDrop(); sfx.uno(); }
+
+  const nowMyTurn = myTurn();
+  if (nowMyTurn && !fxPrev.myTurn && !dealing) sfx.turn();
+  if (G.phase === "ended" && fxPrev.phase !== "ended") sfx.win();
 
   fxPrev.hand = handLen;
   fxPrev.color = G.color;
   fxPrev.round = G.round;
   fxPrev.counts = counts;
+  fxPrev.myTurn = nowMyTurn;
+  fxPrev.phase = G.phase;
   lastTurnSeat = G.turn?.seat ?? lastTurnSeat;
 }
 
@@ -317,6 +329,7 @@ function renderCenter() {
   $("pile").innerHTML = G.pileTop ? cardHtml(G.pileTop, "big-card") : "";
   if (lastPileKey !== null && lastPileKey.split("|")[0] !== G.pileTop) {
     const el = $("pile").firstElementChild;
+    sfx.play();
     if (el) {
       // 让牌从「刚出牌那个人」的座位飞过来
       const src = lastTurnSeat === G.you
@@ -330,7 +343,7 @@ function renderCenter() {
       el.classList.add("fly");
     }
     const v = valOf(G.pileTop ?? "");
-    if (v === "d" || v === "W") jolt("game", "quake", 460); // +2 / +4 落桌
+    if (v === "d" || v === "W") { jolt("game", "quake", 460); sfx.slam(); } // +2 / +4 落桌
   }
   lastPileKey = pileKey;
 
@@ -559,6 +572,11 @@ function requireNick() {
 
 function init() {
   $("nick").value = localStorage.getItem("bg-nick") ?? localStorage.getItem("dao-nick") ?? "";
+  // 音频保底解锁:这几个按钮必然是真实用户手势,通用监听万一没覆盖到也不会哑
+  for (const id of ["btn-create", "btn-join", "btn-start", "btn-addbot"]) {
+    $(id).addEventListener("click", () => sfxEnsure());
+  }
+
   $("btn-create").onclick = createRoom;
   $("btn-join").onclick = () => {
     if (!requireNick()) return;
@@ -581,6 +599,14 @@ function init() {
       $("chat").value = "";
     }
   });
+
+  const snd = $("btn-sound");
+  const paintSnd = () => {
+    snd.textContent = isMuted() ? "🔇" : "🔊";
+    snd.classList.toggle("off", isMuted());
+  };
+  snd.onclick = () => { setMuted(!isMuted()); sfxEnsure(); paintSnd(); };
+  paintSnd();
 
   const room = new URLSearchParams(location.search).get("room");
   if (room) {
