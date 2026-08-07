@@ -5,3 +5,5 @@ node_modules/
 # AI 出图的全分辨率原图,只留 public/img 下的网页版
 yuyi/art-src/
 fangshi/art-src/
+xingguo/art-src/
+majiang/art-src/

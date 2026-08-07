@@ -1,0 +1,11 @@
+{
+  "name": "xingguo",
+  "private": true,
+  "type": "module",
+  "description": "黑猩猩和电炖锅打架 —— 2D 横版搞笑格斗,人机 / 同屏双人 / 围观 / 联机对战",
+  "scripts": {
+    "dev": "../dao/node_modules/.bin/wrangler dev --port 8790",
+    "deploy": "../dao/node_modules/.bin/wrangler deploy",
+    "test": "node test/sim.mjs"
+  }
+}

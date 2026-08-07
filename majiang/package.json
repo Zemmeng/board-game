@@ -1,0 +1,11 @@
+{
+  "name": "majiang",
+  "private": true,
+  "type": "module",
+  "description": "川麻(血战到底)—— 108 张无字牌,定缺、换三张、刮风下雨,胡了继续打到只剩一家",
+  "scripts": {
+    "dev": "../dao/node_modules/.bin/wrangler dev --port 8791",
+    "deploy": "../dao/node_modules/.bin/wrangler deploy",
+    "test": "node test/tiles.mjs"
+  }
+}

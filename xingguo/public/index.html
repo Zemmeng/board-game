@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>黑猩猩和电炖锅打架</title>
+  <meta name="description" content="一只黑猩猩和一口电炖锅在那里打架。2D 横版搞笑格斗,可人机、同屏双人、围观,也能联机对战。">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='16' fill='%23241a12'/><circle cx='34' cy='44' r='19' fill='%236b4a2f'/><rect x='56' y='34' width='30' height='30' rx='5' fill='%23c9ccd1'/><rect x='54' y='28' width='34' height='7' rx='3.5' fill='%23e8ebee'/></svg>">
+  <meta property="og:title" content="黑猩猩和电炖锅打架">
+  <meta property="og:description" content="一只黑猩猩和一口电炖锅在那里打架。能人机、能双人、能围观、能联机。">
+  <meta property="og:image" content="https://xingguo.wawazhiliao.com/img/cover.jpg">
+  <meta property="og:url" content="https://xingguo.wawazhiliao.com">
+  <meta name="twitter:card" content="summary_large_image">
+  <!-- 改 CSS/JS 后把 ?v= 都 +1 -->
+  <link rel="stylesheet" href="style.css?v=1">
+</head>
+<body>
+
+  <!-- 首页:选模式 -->
+  <section id="home" class="screen">
+    <div class="card">
+      <h1>黑猩猩<span class="vs">和</span>电炖锅<span class="vs">打架</span></h1>
+      <p class="tagline">一只灵长类,一口厨房电器,谁也说服不了谁</p>
+
+      <div class="modes">
+        <button class="mode" data-mode="solo">
+          <b>人机对战</b><span>你打它,机器人陪练</span>
+        </button>
+        <button class="mode" data-mode="local2p">
+          <b>同屏双人</b><span>一台电脑,两个人抢键盘</span>
+        </button>
+        <button class="mode" data-mode="watch">
+          <b>围观</b><span>你不用动手,看它俩自己打</span>
+        </button>
+        <button class="mode" data-mode="online">
+          <b>联机对战</b><span>开房发码,跟朋友隔空互殴</span>
+        </button>
+      </div>
+
+      <div class="pickrow">
+        <span class="lbl">你演</span>
+        <button class="pick on" data-side="chimp">🐒 黑猩猩</button>
+        <button class="pick" data-side="pot">🍲 电炖锅</button>
+      </div>
+      <div class="pickrow">
+        <span class="lbl">难度</span>
+        <button class="lvl" data-lv="easy">菜鸟</button>
+        <button class="lvl on" data-lv="normal">老手</button>
+        <button class="lvl" data-lv="hard">锅王</button>
+      </div>
+
+      <p class="hint">键盘:<b>A/D</b> 走 · <b>W</b> 跳 · <b>S</b> 挡 · <b>J</b> 轻 · <b>K</b> 重 · <b>L</b> 绝招<br>
+        手机直接点屏幕下方的按钮</p>
+      <p class="hint"><a href="https://games.wawazhiliao.com">← 返回游戏合集</a></p>
+    </div>
+  </section>
+
+  <!-- 联机大厅 -->
+  <section id="lobby" class="screen hidden">
+    <div class="card">
+      <h2>房间码 <span id="lobby-code" class="room-code"></span></h2>
+      <p class="hint">把房间码或本页链接发给对手,两个人到齐就能开打</p>
+      <ul id="lobby-players"></ul>
+      <p id="lobby-wait" class="hint"></p>
+      <div class="row">
+        <button id="btn-lobby-bot">🤖 叫个机器人来</button>
+        <button id="btn-leave" class="linkish">离开房间</button>
+      </div>
+      <p id="lobby-err" class="err"></p>
+    </div>
+  </section>
+
+  <!-- 打架现场 -->
+  <section id="fight" class="screen hidden">
+    <div id="stage-wrap">
+      <canvas id="stage" width="960" height="540"></canvas>
+      <div id="shout" class="hidden"></div>
+      <button id="btn-quit" title="退出">✕</button>
+    </div>
+    <div id="pad" class="hidden">
+      <div class="pad-side">
+        <button class="pb" data-k="left">◀</button>
+        <button class="pb" data-k="right">▶</button>
+      </div>
+      <div class="pad-side">
+        <button class="pb" data-k="down">挡</button>
+        <button class="pb" data-k="up">跳</button>
+        <button class="pb hit" data-k="light">轻</button>
+        <button class="pb hit" data-k="heavy">重</button>
+        <button class="pb sp" data-k="special">绝</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 结算 -->
+  <div id="modal-layer" class="hidden"><div id="modal" class="card"></div></div>
+  <div id="toast" class="hidden"></div>
+
+  <script type="module" src="js/app.js?v=1"></script>
+</body>
+</html>
