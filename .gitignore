@@ -1,3 +1,6 @@
 node_modules/
 .wrangler/
 .DS_Store
+
+# AI 出图的全分辨率原图(~81MB),只留 public/img 下的网页版
+yuyi/art-src/

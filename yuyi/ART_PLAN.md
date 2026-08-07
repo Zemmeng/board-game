@@ -1,16 +1,62 @@
-# 余一 · 美术素材计划(进行中)
+# 余一 · 美术素材计划
 
-状态:**素材未生成**。计划用可灵 AI(Kling)的 MCP 直接生成并由 Claude 自行质检。
-可灵 MCP 已配置在用户级 `~/.claude.json`(`kling_ai` → https://kling.ai/mcp,远程 OAuth),
-**需要新会话启动时完成一次 OAuth 授权**;原配置备份在 `~/.claude.json.bak-kling`。
+状态:**20 张素材已全部生成、质检并接入界面**(2026-08-07)。剩余未做:动画。
 
-## 流程
+## 怎么出的
 
-1. 新会话连上 kling_ai 后,先 `query_membership_and_credits` 查额度并向用户报告预计消耗
-2. 按下方清单逐张生成,先做 1~6 号定风格,确认后再批量
-3. 每张下载后自检:风格统一 / 透明底无白边 / 卡面中心留白 / 画面无文字数字,不合格改词重出
-4. 合格素材放 `public/img/`(文件名见清单),接入界面后做动画:
-   发牌扇入、出牌飞落旋转、摸牌翻面、+2/+4 冲击抖动、喊余一时朱红印章砸落、被抓罚牌手牌一颤、换色全桌涟漪
+不走 `kling_ai` MCP(非交互会话跑不了 OAuth),改走**可灵官方 CLI**:
+
+```bash
+npx skills add klingai-tech/skills          # 装 skill(说明书,不干活)
+npm i -g @klingai/cli-global                # 海外站包;国内站是 @klingai/cli-cn
+kling login                                 # 浏览器 OAuth,凭据写 ~/.kling/.credentials
+```
+
+用的是**会员灵感值**(不是 kling.ai/dev 开放平台的 AK/SK 按量计费)。
+模型 `kling-image-v3_0`,单张 1 灵感值,20~60 秒出图。含返工全程约 40 点。
+
+生成脚本见提交说明;单条命令形如:
+
+```bash
+kling text_to_image --model kling-image-v3_0 --img_resolution 2k --aspectRatio 3:4 \
+  --poll 150 --quiet --skill-name kling-cli --skill-version 0.1.3 '<prompt>'
+```
+
+## 踩过的坑(改词经验,后续补素材直接抄)
+
+1. **「playing card」会被理解成「一张牌摆在桌上」**,四周留纸边。必须写
+   `filling the ENTIRE image edge to edge, full bleed, no outer margin, no table, no shadow,
+   flat texture NOT a photograph of an object`。
+2. **百分比不听话**。让它画「占 55% 的椭圆」,回回给你画成占 80% 的开光。
+   → **凡是尺寸/位置要精确的元素都别让 AI 画**:牌面中心的米白椭圆改由 CSS 画
+   (`.ucard::after`),五色完全一致、数字永远居中;印章里的「余一」二字同理,用真字体叠。
+3. **「Chinese paper-cut」会诱导它往画面里塞汉字**(福/囍那类)。硬否定词:
+   `STRICTLY NO Chinese characters, no hanzi, no calligraphy, no seal script`。
+4. **说了 no shadow 它照样加地面投影**,灰色阴影躲过抠白。要写死
+   `ABSOLUTELY NO SHADOW — no drop shadow, no ground shadow, no grey patch anywhere`。
+5. **不出透明底**。让它出**纯白底**再抠(实测背景 min≥245、饱和度≤7)。
+6. **颜色会发灰**。要浓就明写 `RICH SATURATED ... definitely not pale, not grey, not washed out`。
+
+## 后处理
+
+原图 20 张共 81MB,`yuyi/art-src/`(已 gitignore,只在本机)。仓库里的
+`public/img/` 是网页版,共 **2.1MB**:
+
+- 不透明的转 JPEG(`sips -s format jpeg`):牌背/牌面 482×640、头像 200²、桌布 1024²、封面 1200×677
+- 透明的走 **漫水填充抠白**(脚本思路:从四边 BFS,只清除与画面边缘连通的近白像素,
+  主体内部的白——锦鲤高光、空白牌面、兔毛——一律保留,边界按亮度做软过渡防白边)
+
+## 接入方式
+
+几乎纯 CSS:`.c-r/.c-y/.c-g/.c-b/.c-w` 和 `.ucard.back` 换 `background-image`,
+`body` 铺 `table.jpg`,`#btn-uno` 用 `seal-yuyi.png`。
+JS 只加了两处:`cardHtml()` 给卡片多挂一个值类 `v-<v>`(让 CSS 能按牌型换图标),
+`renderPlayers()` 按座位号挂 `avatar-N.jpg`。
+
+## 待办:动画
+
+发牌扇入、出牌飞落旋转、摸牌翻面、+2/+4 冲击抖动、喊余一时朱红印章砸落、
+被抓罚牌手牌一颤、换色全桌涟漪。
 
 ## 全局风格前缀(每条 prompt 开头)
 
@@ -38,6 +84,7 @@
 | avatar-1..6.png | 各 256×256 透明 | Cute round animal portrait medallion, head and shoulders in circular frame, warm and friendly:红冠鹤 / 锦鸡 / 玉兔 / 青锦鲤 / 熊猫 / 虎崽 |
 | cover.png | 1200×675 | Festive horizontal illustration, four hands throwing colorful cards across a table, cards trailing red gold green indigo ribbons, dynamic diagonal composition, joyful energy. |
 
-## 备选
+## 备选(已启用)
 
-可灵连不上时:把「全局风格前缀 + 清单」整段交给用户,由用户用 GPT 生成后发回,Claude 负责质检与接入。
+可灵连不上 → 见 [ART_PROMPTS.md](ART_PROMPTS.md):20 条已拼好前缀的成品 prompt、负向词、
+比例与透明底要求、交付方式。素材落到 `public/img/`(目录已建),先给 1~6 号即可开始接入。

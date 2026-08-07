@@ -157,6 +157,7 @@ function renderPlayers() {
     const vul = G.vulnerable?.seat === i;
     return `
     <div class="player ${active ? "active" : ""}">
+      <img class="pav" src="img/avatar-${(i % 6) + 1}.jpg" alt="" style="box-shadow:0 0 0 2px ${s.color}">
       <span class="dot" style="background:${s.color}"></span>
       <span class="pname">${esc(s.nick)}${i === G.you ? "(你)" : ""}</span>
       ${s.isBot ? '<span title="机器人">🤖</span>' : `<span class="conn ${s.connected ? "on" : ""}"></span>`}
@@ -208,7 +209,7 @@ function cardHtml(card, extra = "") {
     ? `<span class="wdots">${COLORS.map((k) => `<i style="background:${COLOR_INFO[k].hex}"></i>`).join("")}</span>`
     : "";
   return `
-    <div class="ucard ${cls} ${extra}" data-card="${card}">
+    <div class="ucard ${cls} v-${v} ${extra}" data-card="${card}">
       <span class="corner tl">${corner}</span>
       <span class="big">${glyph}</span>
       ${wildDots}

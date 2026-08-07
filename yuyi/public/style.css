@@ -4,7 +4,10 @@ html, body { height: 100%; }
 body {
   margin: 0;
   font-family: "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
-  background: radial-gradient(ellipse at 50% 30%, #2c4a3a 0%, #16281f 70%);
+  background:
+    radial-gradient(ellipse at 50% 30%, rgba(44, 74, 58, 0.42) 0%, rgba(10, 22, 16, 0.84) 75%),
+    url("img/table.jpg") center / cover fixed,
+    #16281f;
   color: #f2e8d5;
 }
 .hidden { display: none !important; }
@@ -103,18 +106,41 @@ input, select {
 .ucard .corner { position: absolute; font-size: 12px; font-weight: 700; }
 .ucard .corner.tl { top: 4px; left: 7px; }
 .ucard .corner.br { bottom: 4px; right: 7px; transform: rotate(180deg); }
-.c-r { background: #d9484a; }
-.c-y { background: #e0a92e; }
-.c-g { background: #3f9e57; }
-.c-b { background: #3f6fd9; }
-.c-w { background: linear-gradient(135deg, #2b2b33 55%, #4a4a58); }
+.c-r { background: #d9484a url("img/face-r.jpg") center / cover; }
+.c-y { background: #e0a92e url("img/face-y.jpg") center / cover; }
+.c-g { background: #3f9e57 url("img/face-g.jpg") center / cover; }
+.c-b { background: #3f6fd9 url("img/face-b.jpg") center / cover; }
+.c-w { background: #2b2b33 url("img/face-w.jpg") center / cover; }
 .wdots { position: absolute; bottom: 16px; left: 0; right: 0; display: flex; justify-content: center; gap: 3px; }
 .wdots i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; border: 1px solid rgba(255,255,255,0.6); }
 .ucard.back {
-  background: repeating-linear-gradient(45deg, #1d3a2c, #1d3a2c 8px, #234534 8px, #234534 16px);
+  background: #1d3a2c url("img/back.jpg") center / cover;
   display: grid; place-items: center;
 }
-.ucard.back span { writing-mode: vertical-lr; font-weight: 800; color: #ffd97a; letter-spacing: 4px; }
+.ucard.back span { display: none; }
+
+/* 国风素材:牌面中心留白(程序画,保证五色一致、数字永远居中) + 功能牌图标 */
+.ucard::after {
+  content: ""; position: absolute; left: 17%; right: 17%; top: 19%; bottom: 19%;
+  border-radius: 50%; background: #f4ead3; opacity: 0.93;
+}
+.ucard.back::after { content: none; }
+.ucard .big { z-index: 1; color: #2b1d10; text-shadow: none; }
+.ucard .corner { z-index: 1; }
+.ucard .wdots { display: none; }
+
+.ucard[class*="v-"] .big { background: center / 74% no-repeat; }
+.ucard.v-s .big, .ucard.v-r .big, .ucard.v-d .big,
+.ucard.v-w .big, .ucard.v-W .big { color: transparent; }
+.ucard.v-s .big { background-image: url("img/icon-skip.png"); }
+.ucard.v-r .big { background-image: url("img/icon-rev.png"); }
+.ucard.v-d .big { background-image: url("img/icon-d2.png"); }
+.ucard.v-w .big { background-image: url("img/icon-wild.png"); }
+.ucard.v-W .big { background-image: url("img/icon-d4.png"); }
+
+.c-y .corner { color: #4a2f10; }
+
+.pav { width: 22px; height: 22px; border-radius: 50%; object-fit: cover; flex: none; }
 .ucard.clickable { cursor: pointer; box-shadow: 0 0 0 3px #ffd97a, 0 4px 14px rgba(0,0,0,0.5); }
 #pile .big-card { width: 84px; height: 120px; }
 #pile .big-card .big { font-size: 40px; }
@@ -129,7 +155,12 @@ input, select {
 #hand .ucard.ok { transform: translateY(-10px); box-shadow: 0 0 0 3px #ffd97a, 0 6px 16px rgba(0,0,0,0.5); z-index: 2; }
 #hand .ucard.ok:hover { transform: translateY(-16px); }
 #hand .ucard.dim { filter: brightness(0.55); }
-#btn-uno { background: #b03a2e; color: #fff; font-weight: 800; font-size: 17px; padding: 12px 16px; border-radius: 50%; flex: none; }
+#btn-uno {
+  background: #b03a2e url("img/seal-yuyi.png") center / 100% 100% no-repeat;
+  color: #f8ecd4; font-weight: 800; font-size: 17px;
+  width: 62px; height: 62px; padding: 0; border-radius: 50%; flex: none;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+}
 #btn-uno.armed { background: #ffd97a; color: #24170a; box-shadow: 0 0 14px 3px rgba(255, 217, 122, 0.8); }
 
 #alerts { display: flex; justify-content: center; }
