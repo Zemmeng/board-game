@@ -1,0 +1,11 @@
+{
+  "name": "fangshi",
+  "private": true,
+  "type": "module",
+  "description": "长安坊市 —— 唐长安主题的买地收租联机桌游(玩法机制致敬经典,名字与美术均为原创)",
+  "scripts": {
+    "dev": "../dao/node_modules/.bin/wrangler dev --port 8789",
+    "deploy": "../dao/node_modules/.bin/wrangler deploy",
+    "test": "node test/sim.mjs"
+  }
+}
