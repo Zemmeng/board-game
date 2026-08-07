@@ -167,6 +167,18 @@ const fanOfH = (s, melds = [], opt = {}) => fanOf(H(s), melds, opt);
   ok_(r.names.some((n) => n.includes("根")), "带杠却没算根:" + r.names);
 }
 {
+  // 碰碰胡:四副全碰出去、手上单吊。亮出去之后手里剩的是将牌那一对(2 张),不是 1 张
+  const melds = [{ kind: "peng", tile: 0 }, { kind: "peng", tile: 10 },
+                 { kind: "peng", tile: 11 }, { kind: "peng", tile: 20 }];
+  const r = fanOf(H("99m"), melds);
+  ok_(r.names.includes("碰碰胡"), "碰碰胡(全碰单吊)没认出来:" + r.names);
+  ok_(r.names.includes("大对"), "碰碰胡同时也该是大对:" + r.names);
+  ok_(multiplierOf(r.fan) === 4, "大对×2 叠碰碰胡×2 该是 ×4,实际 ×" + multiplierOf(r.fan));
+  // 只碰了三副、手上还捏着一副的,不算碰碰胡
+  const r2 = fanOf(H("777m 99m"), melds.slice(0, 3));
+  ok_(!r2.names.includes("碰碰胡"), "没全碰出去却算了碰碰胡:" + r2.names);
+}
+{
   const r = fanOfH("1188m 2299s 3377p 55p");
   ok_(r.names.includes("七对"), "七对没认出来:" + r.names);
 }

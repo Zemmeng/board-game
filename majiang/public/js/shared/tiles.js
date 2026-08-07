@@ -200,14 +200,18 @@ export function fanOf(counts, melds = [], opt = {}) {
   } else if (qing) {
     fan += 2; names.push("清一色");
   } else if (duiDui) {
-    fan += 1; names.push("对对胡");
+    fan += 1; names.push("大对");
   } else {
     names.push("平胡");
   }
 
-  // 金钩钓:手上只剩胡的那一张,其余全碰杠出去了
+  // 碰碰胡:四副全碰(杠)出去,手上单吊一张等胡。
+  // ⚠️ 判定用的是「手上剩 2 张」而不是 1 张 —— 四副亮出去之后,手里留的是**将牌那一对**,
+  //    单吊时握 1 张,胡进来那张之后就是 2 张。早先写成 ===1,这个分支从来没触发过,
+  //    只是恰好掉进「大对」也是 ×2,把错误盖住了。
+  // 这种牌必然同时满足大对,两者叠乘(×2 × ×2 = ×4)。
   const inHand = counts.reduce((a, b) => a + b, 0);
-  if (!qiDui && inHand === 1 && melds.length === 4) { fan += 1; names.push("金钩钓"); }
+  if (!qiDui && inHand === 2 && melds.length === 4) { fan += 1; names.push("碰碰胡"); }
 
   // 根:任意四张相同(含杠)。七对里的四张已经按龙算过,不再重复计根
   if (!qiDui) {
