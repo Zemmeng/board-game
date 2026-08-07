@@ -2,7 +2,7 @@
 import {
   BOARD, GROUPS, CURRENCY, BUILD_NAMES, GO, JAIL, TO_GO,
   groupTiles, hasMonopoly, rentOf, mortgageValue, redeemCost, netWorth,
-} from "./shared/board.js?v=1";
+} from "./shared/board.js?v=2";
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
@@ -216,7 +216,7 @@ function renderActions() {
     } else if (!G.turn.rolled || G.turn.canRollAgain) {
       btns.push(["roll", G.turn.canRollAgain ? "双数!再掷" : "掷骰", "primary"]);
     } else {
-      btns.push(["end_turn", "结束回合", "primary"]);
+      btns.push(["trade_new", "提议交易", ""], ["end_turn", "结束回合", "primary"]);
     }
   }
   el.innerHTML = btns.map(([t, label, cls]) => `<button data-act="${t}" class="${cls}">${label}</button>`).join("");
@@ -227,7 +227,8 @@ function renderActions() {
         const min = (G.pending.high || 9) + 1;
         const v = prompt(`出价(至少 ${min} ${CURRENCY})`, String(min));
         if (v !== null) send({ t: "bid", amount: +v });
-      } else send({ t: act });
+      } else if (act === "trade_new") openTradeCompose();
+      else send({ t: act });
     };
   }
 }
@@ -275,7 +276,77 @@ function renderLog() {
   el.scrollTop = el.scrollHeight;
 }
 
+// 交易:自己拟一份提议
+let composing = false;
+function openTradeCompose() { composing = true; render(); }
+
+const tradeableOf = (seat) =>
+  BOARD.map((_, i) => i).filter((i) => G.tiles[i].owner === seat && G.tiles[i].level === 0);
+
+function renderCompose() {
+  const others = G.seats.map((s, i) => i).filter((i) => i !== me && !G.seats[i].bankrupt);
+  const list = (seat, key) => tradeableOf(seat).map((i) => {
+    const c = BOARD[i];
+    return `<label class="est"><input type="checkbox" data-k="${key}" value="${i}">
+      <span class="sw" style="background:${c.t === "ward" ? GROUPS[c.g].hex : "#8a8a7a"}"></span>
+      <span class="nm">${esc(c.name)}${G.tiles[i].mortgaged ? "(押)" : ""}</span></label>`;
+  }).join("") || `<div class="hint">没有可交易的地(有建筑的要先拆)</div>`;
+
+  $("modal").innerHTML = `<h2>提议交易</h2>
+    <label class="hint">交易对象
+      <select id="tr-to">${others.map((i) => `<option value="${i}">${esc(G.seats[i].nick)}</option>`).join("")}</select>
+    </label>
+    <div><b>我拿出</b><div id="tr-give">${list(me, "give")}</div>
+      <label class="hint">外加现银 <input id="tr-gc" type="number" min="0" value="0"></label></div>
+    <div><b>我想要</b><div id="tr-want"></div>
+      <label class="hint">外加现银 <input id="tr-wc" type="number" min="0" value="0"></label></div>
+    <div style="display:flex;gap:8px">
+      <button id="tr-send" class="primary big">发出提议</button>
+      <button id="tr-cancel" class="big">取消</button>
+    </div>`;
+
+  const paintWant = () => { $("tr-want").innerHTML = list(+$("tr-to").value, "want"); };
+  paintWant();
+  $("tr-to").onchange = paintWant;
+  $("tr-cancel").onclick = () => { composing = false; render(); };
+  $("tr-send").onclick = () => {
+    const pick = (k) => [...$("modal").querySelectorAll(`input[data-k="${k}"]:checked`)].map((x) => +x.value);
+    send({
+      t: "trade_offer", to: +$("tr-to").value,
+      giveTiles: pick("give"), wantTiles: pick("want"),
+      giveCash: +$("tr-gc").value || 0, wantCash: +$("tr-wc").value || 0,
+      givePardon: 0, wantPardon: 0,
+    });
+    composing = false;
+  };
+}
+
+/** 把一份提议讲人话 */
+function tradeText(p) {
+  const names = (l) => l.map((i) => BOARD[i].name).join("、") || "无";
+  return `<div class="hint">
+    <b>${esc(G.seats[p.from].nick)}</b> 拿出:${names(p.give)}${p.giveCash ? ` + ${p.giveCash} ${CURRENCY}` : ""}<br>
+    <b>${esc(G.seats[p.to].nick)}</b> 拿出:${names(p.want)}${p.wantCash ? ` + ${p.wantCash} ${CURRENCY}` : ""}</div>`;
+}
+
 function renderModal() {
+  const p = G.pending;
+  if (composing && G.phase === "play" && !p) { $("modal-layer").classList.remove("hidden"); renderCompose(); return; }
+  composing = false;
+
+  // 收到别人的提议:先把内容摆出来再让人决定
+  if (p?.t === "trade" && p.to === me) {
+    $("modal-layer").classList.remove("hidden");
+    $("modal").innerHTML = `<h2>${esc(G.seats[p.from].nick)} 提出交易</h2>${tradeText(p)}
+      <div style="display:flex;gap:8px">
+        <button id="tr-ok" class="primary big">接受</button>
+        <button id="tr-no" class="warn big">回绝</button>
+      </div>`;
+    $("tr-ok").onclick = () => send({ t: "trade_accept" });
+    $("tr-no").onclick = () => send({ t: "trade_reject" });
+    return;
+  }
+
   const show = G.phase === "ended";
   $("modal-layer").classList.toggle("hidden", !show);
   if (!show) return;
