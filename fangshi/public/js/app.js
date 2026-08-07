@@ -83,7 +83,8 @@ function buildBoard() {
     const [r, col] = gridPos(i);
     const el = document.createElement("div");
     el.id = "cell" + i;
-    el.className = "cell" + (i % 10 === 0 ? " corner" : "")
+    // k-<type> 让 CSS 能按格子类型贴图:四角上大图,城门/渠/诏令/传闻/税上图标
+    el.className = "cell k-" + c.t + (i % 10 === 0 ? " corner" : "")
       + (["edict", "rumor", "tax", "gate", "canal"].includes(c.t) ? " special" : "");
     el.style.gridArea = `${r} / ${col} / ${r + 1} / ${col + 1}`;
     const bar = c.t === "ward" ? `<div class="bar" style="background:${GROUPS[c.g].hex}"></div>` : "";
@@ -111,6 +112,41 @@ function render() {
   renderEstate();
   renderLog();
   renderModal();
+  renderCardPop();
+}
+
+// ---------- 抽牌亮卡面 ----------
+// 只认 lastCard.seq 变没变,不去比对文字(同一张牌可能重复抽到)。
+let lastCardSeq = null;   // null = 还没跟服务端对过表
+let cardTimer = 0;
+
+function renderCardPop() {
+  const c = G.lastCard;
+  const seq = c?.seq ?? 0;
+  // 首次收到状态只对齐序号:中途进房/断线重连的人不该被补弹一张旧牌
+  if (lastCardSeq === null) { lastCardSeq = seq; return; }
+  if (seq === lastCardSeq) return;
+  lastCardSeq = seq;
+  if (c) showCard(c);
+}
+
+function showCard(c) {
+  clearTimeout(cardTimer);
+  document.getElementById("card-pop")?.remove();
+  const who = G.seats[c.seat]?.nick ?? "";
+  const el = document.createElement("div");
+  el.id = "card-pop";
+  el.innerHTML = `<div class="cardface k-face-${c.kind}">
+    <div class="ct">
+      <div class="ck">${c.kind === "edict" ? "诏 令" : "市井传闻"}</div>
+      <div class="cx">${esc(c.text)}</div>
+      <div class="cw">${esc(who)}</div>
+    </div></div>`;
+  document.body.appendChild(el);
+  cardTimer = setTimeout(() => {
+    el.classList.add("out");
+    setTimeout(() => el.remove(), 320);
+  }, 3000);
 }
 
 function renderLobby() {
@@ -358,6 +394,8 @@ function renderModal() {
 
 function leave() {
   leaving = true; joined = false; G = null;
+  lastCardSeq = null; clearTimeout(cardTimer);
+  document.getElementById("card-pop")?.remove();
   try { ws?.close(); } catch {}
   sessionStorage.removeItem("fangshi-room");
   history.replaceState(null, "", location.pathname);

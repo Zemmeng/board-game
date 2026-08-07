@@ -430,6 +430,9 @@ export class FangshiRoom {
     if (this.g[key] >= deck.length) this.g[key] = 0;
     const card = table[deck[this.g[key]++]];
     this.note(`【${kind === "edict" ? "诏令" : "市井传闻"}】${card.text}`);
+    // 抽到的牌单独广播一份,前端好把卡面亮出来(只靠日志里那一行太容易看漏)。
+    // seq 自增,前端靠它认「这是新抽的一张」,不去比对文字。
+    this.g.lastCard = { kind, text: card.text, seat, seq: (this.g.lastCard?.seq ?? 0) + 1 };
 
     switch (card.act) {
       case "move":

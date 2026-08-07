@@ -6,7 +6,7 @@ body {
   font-family: "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
   background:
     radial-gradient(ellipse at 50% 25%, rgba(51, 52, 42, 0.55) 0%, rgba(15, 16, 12, 0.9) 72%),
-    url("img/felt.jpg") center / cover fixed,
+    url("img/felt2.jpg") center / cover fixed,
     #171812;
   color: #f2e8d5;
 }
@@ -32,6 +32,12 @@ input {
 /* 首页 / 大厅 */
 .screen { min-height: 100vh; }
 #home, #lobby { display: grid; place-items: center; padding: 20px; }
+/* 首页铺长安市集全景,压暗到能托住上面的米纸面板 */
+#home {
+  background:
+    linear-gradient(rgba(22, 17, 10, 0.52), rgba(22, 17, 10, 0.8)),
+    url("img/cover.jpg") center / cover fixed;
+}
 .card {
   background: #f2e8d5; color: #2a2018;
   border-radius: 14px; padding: 26px; width: min(440px, 94vw);
@@ -66,9 +72,13 @@ input {
   position: relative;
 }
 
-/* 地格 */
+/* 地格 —— 米纸底纹压一层米色,纹理只留个意思,别抢字 */
 .cell {
-  background: #efe3c9; color: #2a2018;
+  background:
+    linear-gradient(rgba(239, 227, 201, 0.82), rgba(239, 227, 201, 0.82)),
+    url("img/paper.jpg") center / cover;
+  background-color: #efe3c9;
+  color: #2a2018;
   display: flex; flex-direction: column; overflow: hidden;
   font-size: 10px; line-height: 1.15; position: relative;
   padding: 2px;
@@ -76,9 +86,45 @@ input {
 .cell .bar { height: 13%; min-height: 6px; margin: -2px -2px 2px; flex: none; }
 .cell .nm { font-weight: 700; font-size: 10.5px; }
 .cell .pr { margin-top: auto; color: #6b5a45; font-size: 9px; }
-.cell.corner { background: #e3d4b2; align-items: center; justify-content: center; text-align: center; }
-.cell.corner .nm { font-size: 12px; }
-.cell.special { background: #e7dcc0; }
+/* 贴图走 ::before/::after,格子里的字统统抬到 z-index 1 上面去。
+   注意 ::after 在 DOM 顺序上排在所有子元素之后,不显式压层就会盖住字。 */
+.cell > * { z-index: 1; }
+.cell .nm, .cell .pr, .cell .bar { position: relative; }
+
+/* 四角:整格铺画,中间压一圈米色蒙版托住居中的字 */
+.cell.corner { align-items: center; justify-content: center; text-align: center; }
+/* 角格可用宽度只有约 48px:12px 时「差役拿人」正好卡在换行边界上,收到 11px 才不断行。
+   「京兆府大牢」五个字更挤,单独再小一号,免得末字被甩到第二行。 */
+.cell.corner .nm { font-size: 11px; letter-spacing: -0.2px; }
+.cell.k-jail .nm { font-size: 9.5px; letter-spacing: -0.3px; }
+.cell.corner::before {
+  content: ""; position: absolute; inset: 0; z-index: 0;
+  background: var(--art) center / cover;
+}
+/* 蒙版只在正中托一下字,往外迅速化开,别把画盖没了 */
+.cell.corner::after {
+  content: ""; position: absolute; inset: 0; z-index: 0;
+  background: radial-gradient(ellipse at 50% 42%,
+    rgba(248, 241, 224, 0.82) 0%, rgba(248, 241, 224, 0.44) 48%, rgba(248, 241, 224, 0) 100%);
+}
+.cell.corner .nm, .cell.corner .pr { text-shadow: 0 1px 3px rgba(252, 248, 238, 0.95); }
+.cell.k-go   { --art: url("img/corner-go.jpg"); }
+.cell.k-jail { --art: url("img/corner-jail.jpg"); }
+.cell.k-free { --art: url("img/corner-free.jpg"); }
+.cell.k-togo { --art: url("img/corner-togo.jpg"); }
+
+/* 特殊格:图标当水印压在名字与价钱之间 */
+.cell.special { background-color: #e7dcc0; }
+.cell.special::before {
+  content: ""; position: absolute; inset: 0; z-index: 0;
+  background: var(--icon) no-repeat center 56% / 46%;
+  opacity: 0.92;
+}
+.cell.k-gate  { --icon: url("img/icon-gate.png"); }
+.cell.k-canal { --icon: url("img/icon-canal.png"); }
+.cell.k-edict { --icon: url("img/icon-edict.png"); }
+.cell.k-rumor { --icon: url("img/icon-rumor.png"); }
+.cell.k-tax   { --icon: url("img/icon-tax.png"); }
 .cell.mine { box-shadow: inset 0 0 0 2px #c78f3d; }
 .cell.mortgaged { filter: grayscale(0.75) brightness(0.85); }
 .cell .own { position: absolute; right: 2px; top: 2px; width: 8px; height: 8px; border-radius: 50%; border: 1px solid rgba(0,0,0,.4); }
@@ -143,6 +189,42 @@ input {
   box-shadow: 0 6px 20px rgba(0,0,0,.55);
 }
 
+/* 抽到诏令 / 市井传闻:把卡面亮出来,三秒后自己收 */
+#card-pop {
+  position: fixed; inset: 0; z-index: 55; display: grid; place-items: center;
+  background: rgba(0, 0, 0, 0.5); pointer-events: none;
+  animation: cardveil 0.28s ease both;
+}
+#card-pop.out { animation: cardveil 0.3s ease both reverse; }
+.cardface {
+  width: min(286px, 68vw); aspect-ratio: 3 / 4;
+  /* 两张卡面都已压成 600×800,整张铺满,正文的百分比 inset 才对得上 */
+  background: var(--face) center / 100% 100%; border-radius: 13px;
+  box-shadow: 0 26px 64px rgba(0, 0, 0, 0.72);
+  position: relative; animation: cardin 0.44s cubic-bezier(0.2, 1.25, 0.4, 1) both;
+}
+#card-pop.out .cardface { animation: cardin 0.3s ease both reverse; }
+/* 文字落在卡面预留的那块空白纸上 */
+.cardface .ct {
+  position: absolute; left: 19%; right: 19%; top: 31%; bottom: 15%;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+  text-align: center; color: #35281a;
+}
+.cardface .ck { font-size: 12px; letter-spacing: 4px; color: #9a7b4a; }
+.cardface .cx { font-size: 15.5px; line-height: 1.65; font-weight: 600; }
+.cardface .cw { font-size: 11.5px; color: #8a7454; }
+.k-face-edict { --face: url("img/card-edict.jpg"); }
+.k-face-rumor { --face: url("img/card-rumor.jpg"); }
+
+@keyframes cardveil { from { opacity: 0; } to { opacity: 1; } }
+@keyframes cardin {
+  from { opacity: 0; transform: translateY(26px) scale(0.82) rotate(-5deg); }
+  to   { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #card-pop, #card-pop.out, .cardface, #card-pop.out .cardface { animation: none; }
+}
+
 @media (max-width: 900px) {
   #game { flex-direction: column; padding: 8px; }
   #side { width: 100%; max-height: none; }
@@ -151,4 +233,12 @@ input {
   .cell .nm { font-size: 9px; }
   .cell .pr { font-size: 8px; }
   .pc { width: 12px; height: 12px; font-size: 8px; }
+
+  /* 手机上格子只剩约 33px 宽。角格的字号得单独再压一遍 ——
+     .cell.corner .nm 的权重比上面的 .cell .nm 高,不写死就还是桌面的 11px。 */
+  .cell.corner .nm { font-size: 8.5px; letter-spacing: -0.3px; }
+  .cell.k-jail .nm { font-size: 7.5px; }
+  .cell.corner .pr { display: none; }   /* 副标题塞不下,靠画面和坊名表意 */
+  /* 图标让位给文字,免得价钱压在图上糊成一团 */
+  .cell.special::before { background-size: 40%; opacity: 0.6; }
 }
