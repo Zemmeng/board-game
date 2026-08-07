@@ -21,7 +21,7 @@ const px = (v) => ({ x: v.x * SIZE, y: v.y * SIZE });
 export function initBoard(svgEl, board) {
   svg = svgEl;
   svg.innerHTML = "";
-  svg.setAttribute("viewBox", "-235 -225 470 450");
+  svg.setAttribute("viewBox", "-272 -260 544 520");
   layers = {};
   for (const name of ["tiles", "pieces", "robber", "fx", "hl"]) {
     layers[name] = el("g", { class: "layer-" + name }, svg);
@@ -54,6 +54,30 @@ export function initBoard(svgEl, board) {
         }, g);
       }
     }
+  }
+  if (board.ports) drawPorts(board.ports);
+}
+
+// 港口:两条栈桥连到码头圆盘,3:1 通用是羊皮纸底,2:1 专属用对应资源色
+function drawPorts(ports) {
+  for (const p of ports) {
+    const [a, b] = p.v.map((vid) => px(VERTICES.get(vid)));
+    const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+    const len = Math.hypot(mx, my) || 1;
+    const ox = mx + (mx / len) * 30, oy = my + (my / len) * 30; // 沿离岸方向外推
+    const g = el("g", { class: "port" }, layers.tiles);
+    el("line", { x1: a.x, y1: a.y, x2: ox, y2: oy, class: "pier" }, g);
+    el("line", { x1: b.x, y1: b.y, x2: ox, y2: oy, class: "pier" }, g);
+    const any = p.kind === "any";
+    el("circle", {
+      cx: ox, cy: oy, r: 13,
+      class: "port-disc",
+      fill: any ? "#f6eed8" : RES[p.kind].color,
+    }, g);
+    const label = el("text", { x: ox, y: oy + 3.5, class: "port-label" + (any ? " any" : "") }, g);
+    label.textContent = any ? "3:1" : "2:1";
+    const tip = el("title", {}, g);
+    tip.textContent = any ? "通用港:任意资源 3:1 兑换" : `${RES[p.kind].name}专属港:${RES[p.kind].name} 2:1 兑换`;
   }
 }
 

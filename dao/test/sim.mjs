@@ -3,8 +3,8 @@
 // 用法:node test/sim.mjs [局数]
 import { GameRoom } from "../src/room.js";
 import {
-  RES_KEYS, COSTS, PIECE_LIMIT, VERTICES, EDGES, TILE_VERTICES,
-  legalVillages, legalRoads, canPay, buildingAt, totalVP,
+  RES_KEYS, COSTS, PIECE_LIMIT, VERTICES, EDGES, TILE_VERTICES, COAST_EDGES,
+  legalVillages, legalRoads, canPay, buildingAt, totalVP, getRates, generateBoard,
 } from "../public/js/shared/rules.js";
 
 const GAMES = Number(process.argv[2] ?? 40);
@@ -13,10 +13,23 @@ function assert(cond, msg) {
   if (!cond) throw new Error("断言失败:" + msg);
 }
 
-// 几何自检:标准卡坦棋盘 19 格 / 54 顶点 / 72 棱
+// 几何自检:标准卡坦棋盘 19 格 / 54 顶点 / 72 棱 / 30 条海岸棱
 assert(TILE_VERTICES.size === 19, `地格数 ${TILE_VERTICES.size} ≠ 19`);
 assert(VERTICES.size === 54, `顶点数 ${VERTICES.size} ≠ 54`);
 assert(EDGES.size === 72, `棱数 ${EDGES.size} ≠ 72`);
+assert(COAST_EDGES.length === 30, `海岸棱 ${COAST_EDGES.length} ≠ 30`);
+
+// 港口自检:9 座(4 通用 + 每种资源各 1),互不共享顶点
+for (let i = 0; i < 20; i++) {
+  const b = generateBoard();
+  assert(b.ports.length === 9, "港口应有 9 座");
+  assert(b.ports.filter((p) => p.kind === "any").length === 4, "3:1 港应有 4 座");
+  for (const k of RES_KEYS) {
+    assert(b.ports.filter((p) => p.kind === k).length === 1, `${k} 专属港应有 1 座`);
+  }
+  const vs = b.ports.flatMap((p) => p.v);
+  assert(new Set(vs).size === vs.length, "港口顶点不应重叠");
+}
 
 function makeRoom() {
   const sockets = [];
@@ -144,6 +157,19 @@ async function playOneGame(gameNo) {
     } else {
       const seat = t.seat;
       const s = g.seats[seat];
+      // 偶尔由非当前玩家发起还价,覆盖「当前玩家拍板成交」路径
+      if (!t.trade && Math.random() < 0.05) {
+        const oi = g.seats.findIndex((o, i) => i !== seat && RES_KEYS.some((k) => o.res[k] > 0));
+        if (oi >= 0) {
+          const giveK = RES_KEYS.find((k) => g.seats[oi].res[k] > 0);
+          const wantK = pick(RES_KEYS.filter((k) => k !== giveK));
+          await act(room, wsOf(oi), { t: "offer", give: { [giveK]: 1 }, want: { [wantK]: 1 } });
+          if (s.res[wantK] >= 1) await act(room, wsOf(seat), { t: "offer_accept" });
+          else await act(room, wsOf(oi), { t: "offer_cancel" });
+          checkConservation(room.g);
+          continue;
+        }
+      }
       if (t.freeRoads > 0) {
         const spots = legalRoads(g, seat);
         if (spots.length && s.roads.length < PIECE_LIMIT.road) {
@@ -215,8 +241,36 @@ async function playOneGame(gameNo) {
       }
     }
     if (devOnly || !g2.turn.rolled) return false;
-    // 4:1 换缺口资源
-    const rich = RES_KEYS.filter((k) => s.res[k] >= 4);
+    // 玩家间交易:发起 1 换 1,收集表态后成交或撤回(顺带覆盖还价路径)
+    if (Math.random() < 0.10) {
+      const giveK = RES_KEYS.find((k) => s.res[k] > 0);
+      if (giveK) {
+        const wantK = pick(RES_KEYS.filter((k) => k !== giveK));
+        const give = { [giveK]: 1 }, want = { [wantK]: 1 };
+        if (seat === g2.turn.seat) {
+          await act(room2, ws, { t: "offer", give, want });
+          for (let i = 0; i < room2.g.seats.length; i++) {
+            if (i === seat) continue;
+            const other = room2.g.seats[i];
+            if (other.res[wantK] >= 1) {
+              await act(room2, wsOf(i), { t: "offer_accept" });
+            } else {
+              await act(room2, wsOf(i), { t: "offer_decline" });
+            }
+          }
+          const tr = room2.g.turn.trade;
+          if (tr?.accepted.length) {
+            await act(room2, ws, { t: "offer_pick", seat: pick(tr.accepted) });
+          } else if (tr) {
+            await act(room2, ws, { t: "offer_cancel" });
+          }
+          return true;
+        }
+      }
+    }
+    // 银行/港口兑换(按自己的汇率)
+    const rates = getRates(g2, seat);
+    const rich = RES_KEYS.filter((k) => s.res[k] >= rates[k]);
     if (rich.length && Math.random() < 0.8) {
       const give = pick(rich);
       const want = RES_KEYS.filter((k) => k !== give && g2.bank[k] > 0);

@@ -104,6 +104,31 @@ export function tilesOfVertex(vid) {
   return VERTICES.get(vid).tiles;
 }
 
+// 海岸线环:恰好一侧是真实地格的棱,按环绕顺序排好(共 30 条)
+export const COAST_EDGES = (() => {
+  const isCoast = (eid) => {
+    const hexes = eid.split("|");
+    return (TILE_SET.has(hexes[0]) ? 1 : 0) + (TILE_SET.has(hexes[1]) ? 1 : 0) === 1;
+  };
+  const coastal = [...EDGES.keys()].filter(isCoast);
+  const set = new Set(coastal);
+  const cycle = [coastal[0]];
+  const used = new Set(cycle);
+  while (cycle.length < coastal.length) {
+    const cur = cycle[cycle.length - 1];
+    let next = null;
+    for (const v of EDGES.get(cur).v) {
+      for (const e of VERTEX_EDGES.get(v)) {
+        if (set.has(e) && !used.has(e)) { next = e; break; }
+      }
+      if (next) break;
+    }
+    cycle.push(next);
+    used.add(next);
+  }
+  return cycle;
+})();
+
 // ---------- 棋盘生成(官方变体开局) ----------
 
 export function shuffle(arr, rand = Math.random) {
@@ -182,9 +207,43 @@ export function generateBoard(rand = Math.random) {
     return {
       tiles: TILE_KEYS.map((k) => ({ k, kind: kindOf[k], num: numOf[k] ?? null })),
       robber: desert,
+      ports: generatePorts(rand),
     };
   }
   throw new Error("board generation failed");
+}
+
+// 9 座港口:4 座 3:1 通用 + 5 座 2:1 专属,沿海岸线按官方间距分布,随机起点/方向/种类
+const PORT_OFFSETS = [0, 3, 7, 10, 13, 17, 20, 23, 27];
+const PORT_KINDS = ["any", "any", "any", "any", "wood", "brick", "wheat", "wool", "ore"];
+
+function generatePorts(rand) {
+  const n = COAST_EDGES.length;
+  const kinds = shuffle(PORT_KINDS, rand);
+  const start = Math.floor(rand() * n);
+  const dir = rand() < 0.5 ? 1 : -1;
+  return PORT_OFFSETS.map((off, i) => {
+    const eid = COAST_EDGES[(start + dir * off + n * 2) % n];
+    return { e: eid, v: EDGES.get(eid).v, kind: kinds[i] };
+  });
+}
+
+// 某玩家各资源的银行兑换率:默认 4:1,3:1 通用港降到 3,专属港对应资源降到 2
+export function getRates(game, seat) {
+  const rates = Object.fromEntries(RES_KEYS.map((k) => [k, 4]));
+  for (const p of game.board?.ports ?? []) {
+    const mine = p.v.some((vid) => {
+      const b = buildingAt(game, vid);
+      return b && b.seat === seat;
+    });
+    if (!mine) continue;
+    if (p.kind === "any") {
+      for (const k of RES_KEYS) rates[k] = Math.min(rates[k], 3);
+    } else {
+      rates[p.kind] = 2;
+    }
+  }
+  return rates;
 }
 
 export function makeDevDeck(rand = Math.random) {

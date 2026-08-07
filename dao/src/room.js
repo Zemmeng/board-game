@@ -7,7 +7,7 @@ import {
   generateBoard, makeDevDeck, shuffle,
   VERTICES, EDGES, VERTEX_EDGES, TILE_VERTICES, tilesOfVertex,
   buildingAt, roadOwner, canPay, legalVillages, legalRoads,
-  longestRoadLen, publicVP, totalVP,
+  longestRoadLen, publicVP, totalVP, getRates,
 } from "../public/js/shared/rules.js";
 
 const IDLE_WIPE_MS = 24 * 60 * 60 * 1000; // 闲置一天后清房
@@ -161,6 +161,10 @@ export class GameRoom {
     }
 
     // phase === "play"
+    // 交易消息单独路由:非当前玩家也要能接受/拒绝/还价
+    if (["offer", "offer_cancel", "offer_accept", "offer_decline", "offer_pick"].includes(msg.t)) {
+      return this.onTradeMsg(seat, msg);
+    }
     if (seat !== g.turn.seat) this.fail("还没轮到你");
     switch (msg.t) {
       case "roll": return this.onRoll(seat);
@@ -568,15 +572,101 @@ export class GameRoom {
     const { give, get } = msg;
     if (!RES_KEYS.includes(give) || !RES_KEYS.includes(get) || give === get) this.fail("交换参数不合法");
     const s = g.seats[seat];
-    if (s.res[give] < 4) this.fail(`4:1 交换需要 4 张${RES[give].name}`);
+    const rate = getRates(g, seat)[give]; // 汇率由服务端按港口计算,不信客户端
+    if (s.res[give] < rate) this.fail(`${rate}:1 兑换需要 ${rate} 张${RES[give].name}`);
     if (g.bank[get] < 1) this.fail(`银行没有${RES[get].name}了`);
-    s.res[give] -= 4;
-    g.bank[give] += 4;
+    s.res[give] -= rate;
+    g.bank[give] += rate;
     g.bank[get]--;
     s.res[get]++;
-    this.log(`${s.nick} 用 4 张${RES[give].name}换了 1 张${RES[get].name}`);
+    this.log(`${s.nick} 按 ${rate}:1 用${RES[give].name}换了 1 张${RES[get].name}`);
     await this.commit();
     this.broadcast();
+  }
+
+  // ---------- 玩家间交易 ----------
+
+  cleanResMap(raw) {
+    const m = Object.fromEntries(RES_KEYS.map((k) => [k, 0]));
+    for (const [k, n] of Object.entries(raw ?? {})) {
+      if (!RES_KEYS.includes(k) || !Number.isInteger(n) || n < 0 || n > 19) this.fail("交易数据不合法");
+      m[k] = n;
+    }
+    return m;
+  }
+
+  fmtRes(map) {
+    return Object.entries(map).filter(([, n]) => n > 0)
+      .map(([k, n]) => `${RES[k].name}×${n}`).join("、");
+  }
+
+  async onTradeMsg(seat, msg) {
+    const g = this.g;
+    const t = g.turn;
+    if (!t.rolled) this.fail("掷骰后才能交易");
+    const tr = t.trade;
+
+    if (msg.t === "offer") {
+      // 当前玩家发起报价,或其他玩家向当前玩家还价(官方:交易必须有当前玩家参与)
+      const give = this.cleanResMap(msg.give);
+      const want = this.cleanResMap(msg.want);
+      const sumG = Object.values(give).reduce((a, b) => a + b, 0);
+      const sumW = Object.values(want).reduce((a, b) => a + b, 0);
+      if (!sumG || !sumW) this.fail("给出和想要都不能为空(不能白送)");
+      if (RES_KEYS.some((k) => give[k] > 0 && want[k] > 0)) this.fail("同种资源不能既给又要");
+      if (!canPay(g.seats[seat].res, give)) this.fail("你没有足够的资源可给出");
+      t.trade = { by: seat, give, want, accepted: [], declined: [], botSeen: false };
+      if (seat === t.seat) {
+        this.log(`${this.nick(seat)} 发起交易:出 ${this.fmtRes(give)},求 ${this.fmtRes(want)}`);
+      } else {
+        this.log(`${this.nick(seat)} 向 ${this.nick(t.seat)} 还价:出 ${this.fmtRes(give)},求 ${this.fmtRes(want)}`);
+      }
+    } else if (msg.t === "offer_cancel") {
+      if (!tr || tr.by !== seat) this.fail("没有你发起的交易");
+      t.trade = null;
+      this.log(`${this.nick(seat)} 撤回了交易提议`);
+    } else if (msg.t === "offer_accept") {
+      if (!tr) this.fail("当前没有交易提议");
+      if (tr.by === t.seat) {
+        // 当前玩家的报价:其他玩家表态愿意,等发起人拍板
+        if (seat === t.seat) this.fail("不能接受自己的报价");
+        if (!canPay(g.seats[seat].res, tr.want)) this.fail("你的资源不够支付对方想要的");
+        if (!tr.accepted.includes(seat)) tr.accepted.push(seat);
+        tr.declined = tr.declined.filter((i) => i !== seat);
+        this.log(`${this.nick(seat)} 愿意成交`);
+      } else {
+        // 别人的还价:只有当前玩家能拍板,拍板即成交
+        if (seat !== t.seat) this.fail("只有当前回合玩家能接受还价");
+        this.execTrade(tr.by, seat);
+      }
+    } else if (msg.t === "offer_decline") {
+      if (!tr || tr.by !== t.seat || seat === t.seat) this.fail("当前没有可拒绝的报价");
+      if (!tr.declined.includes(seat)) tr.declined.push(seat);
+      tr.accepted = tr.accepted.filter((i) => i !== seat);
+      this.log(`${this.nick(seat)} 拒绝了交易`);
+    } else {
+      // offer_pick:发起人从愿意成交的人里挑一个
+      if (!tr || tr.by !== seat || seat !== t.seat) this.fail("只有发起交易的当前玩家能选择成交对象");
+      if (!tr.accepted.includes(msg.seat)) this.fail("对方还没有同意这笔交易");
+      this.execTrade(seat, msg.seat);
+    }
+    await this.commit();
+    this.broadcast();
+  }
+
+  // owner 付出 give 收到 want;partner 相反。成交后清空提议
+  execTrade(owner, partner) {
+    const g = this.g;
+    const tr = g.turn.trade;
+    const o = g.seats[owner], p = g.seats[partner];
+    if (!canPay(o.res, tr.give)) this.fail("发起方的资源已经不够了");
+    if (!canPay(p.res, tr.want)) this.fail("对方的资源已经不够了");
+    for (const k of RES_KEYS) {
+      o.res[k] += tr.want[k] - tr.give[k];
+      p.res[k] += tr.give[k] - tr.want[k];
+    }
+    this.log(`🤝 ${o.nick} 用 ${this.fmtRes(tr.give)} 换来了 ${p.nick} 的 ${this.fmtRes(tr.want)}`);
+    g.turn.trade = null;
   }
 
   async onEnd(seat) {
@@ -588,6 +678,7 @@ export class GameRoom {
     g.turn.devPlayed = false;
     g.turn.freeRoads = 0;
     g.turn.pending = null;
+    g.turn.trade = null;
     this.log(`轮到 ${this.nick(g.turn.seat)} 的回合`);
     await this.commit();
     this.broadcast();
@@ -604,6 +695,14 @@ export class GameRoom {
     const t = g.turn;
     if (t.pending?.t === "discard") {
       return Object.keys(t.pending.need).some((i) => g.seats[+i]?.isBot);
+    }
+    const tr = t.trade;
+    if (tr && !t.pending) {
+      // 人类当前玩家的报价,还有机器人没表态
+      if (tr.by === t.seat && !g.seats[t.seat].isBot &&
+          g.seats.some((s, i) => s.isBot && !tr.accepted.includes(i) && !tr.declined.includes(i))) return true;
+      // 有人向机器人当前玩家还价,还没考虑过
+      if (tr.by !== t.seat && g.seats[t.seat]?.isBot && !tr.botSeen) return true;
     }
     return g.seats[t.seat]?.isBot;
   }
@@ -674,22 +773,48 @@ export class GameRoom {
 
     if (t.pending?.t === "robber") {
       const seat = t.seat;
-      // 优先挑有对手建筑可偷的地格
-      const options = g.board.tiles.filter((x) => x.k !== g.board.robber).map((tile) => {
+      // 针对性放强盗:偷得到牌加分、受害者分数越高加分越多、压产值高的地格,避开自己的建筑
+      let best = null, bestScore = -1e9;
+      for (const tile of g.board.tiles) {
+        if (tile.k === g.board.robber) continue;
         const victims = [];
+        let mine = false;
         for (const vid of TILE_VERTICES.get(tile.k)) {
           const b = buildingAt(g, vid);
-          if (b && b.seat !== seat && !victims.includes(b.seat) &&
-              RES_KEYS.some((k) => g.seats[b.seat].res[k] > 0)) victims.push(b.seat);
+          if (!b) continue;
+          if (b.seat === seat) mine = true;
+          else if (!victims.includes(b.seat) &&
+                   RES_KEYS.some((k) => g.seats[b.seat].res[k] > 0)) victims.push(b.seat);
         }
-        return { tile, victims };
-      });
-      const withVictims = options.filter((o) => o.victims.length);
-      const chosen = withVictims.length ? pick(withVictims) : pick(options);
-      return this.onRobber(seat, {
-        tile: chosen.tile.k,
-        victim: chosen.victims.length ? pick(chosen.victims) : null,
-      });
+        let score = pips(tile.num) + Math.random();
+        if (victims.length) score += 6 + 3 * Math.max(...victims.map((v) => publicVP(g, v)));
+        if (mine) score -= 14;
+        if (score > bestScore) { bestScore = score; best = { tile, victims }; }
+      }
+      const victim = best.victims.length
+        ? best.victims.sort((a, b) => publicVP(g, b) - publicVP(g, a))[0]
+        : null;
+      return this.onRobber(seat, { tile: best.tile.k, victim });
+    }
+
+    // 回应交易
+    const tr = t.trade;
+    if (tr && tr.by === t.seat && !g.seats[t.seat].isBot) {
+      const bot = g.seats.findIndex((s, i) =>
+        s.isBot && !tr.accepted.includes(i) && !tr.declined.includes(i));
+      if (bot >= 0) return this.botRespondOffer(bot);
+    }
+    if (tr && tr.by !== t.seat && g.seats[t.seat]?.isBot && !tr.botSeen) {
+      tr.botSeen = true;
+      const sumG = Object.values(tr.give).reduce((a, b) => a + b, 0);
+      const sumW = Object.values(tr.want).reduce((a, b) => a + b, 0);
+      if (canPay(g.seats[t.seat].res, tr.want) && sumG > sumW) {
+        return this.onTradeMsg(t.seat, { t: "offer_accept" });
+      }
+      // 不划算就晾着,继续自己的回合
+      await this.commit();
+      this.broadcast();
+      return;
     }
 
     const seat = t.seat;
@@ -697,8 +822,14 @@ export class GameRoom {
 
     if (!t.rolled) {
       const knight = s.devs.find((d) => d.c === "knight" && d.t < t.n);
-      if (!t.devPlayed && knight && Math.random() < 0.25) {
-        return this.onPlayDev(seat, { card: "knight" });
+      if (!t.devPlayed && knight) {
+        // 强盗压着自家地格时尽快解封;差一张凑最大军时也更积极
+        const blockedMine = TILE_VERTICES.get(g.board.robber)
+          .some((vid) => { const b = buildingAt(g, vid); return b && b.seat === seat; });
+        const armyPush = s.knights === 2 &&
+          (g.army.holder === null || g.seats[g.army.holder].knights <= 3);
+        const prob = blockedMine ? 0.85 : armyPush ? 0.6 : 0.2;
+        if (Math.random() < prob) return this.onPlayDev(seat, { card: "knight" });
       }
       return this.onRoll(seat);
     }
@@ -710,12 +841,25 @@ export class GameRoom {
       }
       return this.onEnd(seat);
     }
+    // 建造选点统一按周围地格出产点数打分
+    const vScore = (vid) => {
+      let score = Math.random();
+      for (const tk of tilesOfVertex(vid)) {
+        const tile = g.board.tiles.find((x) => x.k === tk);
+        if (tile.kind !== "desert") score += pips(tile.num);
+      }
+      return score;
+    };
     if (s.villages.length && s.cities.length < PIECE_LIMIT.city && canPay(s.res, COSTS.city)) {
-      return this.onBuild(seat, { kind: "city", id: pick(s.villages) });
+      const bestV = [...s.villages].sort((a, b) => vScore(b) - vScore(a))[0];
+      return this.onBuild(seat, { kind: "city", id: bestV });
     }
     if (s.villages.length < PIECE_LIMIT.village && canPay(s.res, COSTS.village)) {
       const spots = legalVillages(g, seat);
-      if (spots.length) return this.onBuild(seat, { kind: "village", id: pick(spots) });
+      if (spots.length) {
+        const bestV = [...spots].sort((a, b) => vScore(b) - vScore(a))[0];
+        return this.onBuild(seat, { kind: "village", id: bestV });
+      }
     }
     if (s.roads.length < PIECE_LIMIT.road && canPay(s.res, COSTS.road) &&
         Math.random() < 0.75) {
@@ -726,7 +870,15 @@ export class GameRoom {
       const playable = s.devs.filter((d) => d.t < t.n && d.c !== "vp" && d.c !== "knight");
       if (playable.length && Math.random() < 0.5) {
         const card = pick(playable).c;
-        if (card === "monopoly") return this.onPlayDev(seat, { card, res: pick(RES_KEYS) });
+        if (card === "monopoly") {
+          // 挑对手手里总量最多的资源,收成太少就先留着
+          let bestK = RES_KEYS[0], most = -1;
+          for (const k of RES_KEYS) {
+            const total = g.seats.reduce((a, o, i) => (i === seat ? a : a + o.res[k]), 0);
+            if (total > most) { most = total; bestK = k; }
+          }
+          if (most >= 2) return this.onPlayDev(seat, { card, res: bestK });
+        }
         if (card === "roads") {
           if (s.roads.length < PIECE_LIMIT.road && legalRoads(g, seat).length) {
             return this.onPlayDev(seat, { card });
@@ -745,14 +897,33 @@ export class GameRoom {
     if (g.deck.length && canPay(s.res, COSTS.dev) && Math.random() < 0.4) {
       return this.onBuyDev(seat);
     }
-    // 4:1 换缺口(优先换成一张都没有的资源)
-    const rich = RES_KEYS.filter((k) => s.res[k] >= 4);
-    if (rich.length && Math.random() < 0.8) {
-      const wants = RES_KEYS.filter((k) => s.res[k] === 0 && g.bank[k] > 0);
-      const want = wants.length ? pick(wants) : pick(RES_KEYS.filter((k) => k !== rich[0] && g.bank[k] > 0));
-      if (want) return this.onBankTrade(seat, { give: rich[0], get: want });
+    // 按港口汇率把过剩资源换成下一个建造目标的缺口
+    const rates = getRates(g, seat);
+    const goal =
+      (s.villages.length && s.cities.length < PIECE_LIMIT.city && COSTS.city) ||
+      (s.villages.length < PIECE_LIMIT.village && legalVillages(g, seat).length && COSTS.village) ||
+      (s.roads.length < PIECE_LIMIT.road && COSTS.road) ||
+      COSTS.dev;
+    const missing = RES_KEYS.filter((k) => (goal[k] ?? 0) > s.res[k] && g.bank[k] > 0);
+    if (missing.length && Math.random() < 0.85) {
+      const spare = RES_KEYS.filter((k) => s.res[k] - (goal[k] ?? 0) >= rates[k]);
+      if (spare.length) {
+        return this.onBankTrade(seat, { give: spare[0], get: pick(missing) });
+      }
     }
     return this.onEnd(seat);
+  }
+
+  // 机器人评估人类报价:收益不小于付出才接受;等价交换要求换来的是自己缺的
+  async botRespondOffer(bot) {
+    const g = this.g;
+    const tr = g.turn.trade;
+    const s = g.seats[bot];
+    const sumG = Object.values(tr.give).reduce((a, b) => a + b, 0);
+    const sumW = Object.values(tr.want).reduce((a, b) => a + b, 0);
+    const lacksGiven = RES_KEYS.some((k) => tr.give[k] > 0 && s.res[k] === 0);
+    const ok = canPay(s.res, tr.want) && (sumG > sumW || (sumG === sumW && lacksGiven));
+    return this.onTradeMsg(bot, { t: ok ? "offer_accept" : "offer_decline" });
   }
 
   // ---------- 称号与胜负 ----------

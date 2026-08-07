@@ -2,7 +2,7 @@
 // 服务端是权威;这里只做展示、可点位置的预计算和动作发送
 import {
   RES, RES_KEYS, COSTS, DEV_INFO, PIECE_LIMIT,
-  legalVillages, legalRoads, canPay, publicVP,
+  legalVillages, legalRoads, canPay, publicVP, getRates,
   TILE_VERTICES, buildingAt,
 } from "./shared/rules.js";
 import { initBoard, updatePieces, showHighlights, clearHighlights, flashTiles } from "./render.js";
@@ -195,6 +195,8 @@ function render() {
   renderPlayers();
   renderHand();
   renderDevs();
+  renderBuildPanel();
+  renderTradePanel();
   renderActions();
   renderLog();
   updateHighlights();
@@ -247,7 +249,7 @@ function renderBanner() {
       cls = "mine";
       if (t.freeRoads > 0) text = `「筑路」生效:还可免费修 ${t.freeRoads} 条路,点击高亮棱边`;
       else if (!t.rolled) text = "你的回合:请掷骰子";
-      else text = "行动阶段:建造、买发展卡、4:1 交换,完事点「结束回合」";
+      else text = "行动阶段:建造、买卡、交易或兑换,完事点「结束回合」";
     } else {
       text = `${G.seats[t.seat].nick} 的回合`;
     }
@@ -327,28 +329,119 @@ function renderDevs() {
   }
 }
 
-function renderActions() {
-  const played = G.phase === "play";
-  $("actions").classList.toggle("hidden", !played);
-  if (!played) return;
+// 建造面板:每项显示造价资源点(已有实心/缺少空心)、缺口文字、剩余棋子
+const BUILD_ITEMS = [
+  { kind: "road", name: "道路", vp: "", cost: COSTS.road },
+  { kind: "village", name: "村庄", vp: "1分", cost: COSTS.village },
+  { kind: "city", name: "城邑", vp: "2分", cost: COSTS.city },
+  { kind: "dev", name: "发展卡", vp: "", cost: COSTS.dev },
+];
+
+function renderBuildPanel() {
+  const panel = $("build-panel");
+  if (G.phase !== "play" || G.you < 0) { panel.innerHTML = ""; return; }
   const t = G.turn;
   const me = G.seats[G.you];
+  const res = me.res ?? {};
   const ok = myTurn() && t.rolled && !t.pending;
-  const res = me?.res ?? {};
 
-  setBtn("btn-road", (ok && canPay(res, COSTS.road) && me.roads.length < PIECE_LIMIT.road && legalRoads(G, G.you).length > 0) || (myTurn() && t.freeRoads > 0));
-  setBtn("btn-village", ok && canPay(res, COSTS.village) && me.villages.length < PIECE_LIMIT.village && legalVillages(G, G.you).length > 0);
-  setBtn("btn-city", ok && canPay(res, COSTS.city) && me.villages.length > 0 && me.cities.length < PIECE_LIMIT.city);
-  setBtn("btn-buydev", ok && canPay(res, COSTS.dev) && G.deckCount > 0);
-  setBtn("btn-trade", ok && RES_KEYS.some((k) => res[k] >= 4));
-  setBtn("btn-end", ok);
+  panel.innerHTML = BUILD_ITEMS.map((it) => {
+    const pips = Object.entries(it.cost).map(([k, n]) => {
+      let h = "";
+      for (let i = 0; i < n; i++) {
+        h += `<i class="bpip ${(res[k] ?? 0) > i ? "have" : "lack"}" style="--c:${RES[k].color}" title="${RES[k].name}"></i>`;
+      }
+      return h;
+    }).join("");
+    const lack = Object.entries(it.cost)
+      .filter(([k, n]) => (res[k] ?? 0) < n)
+      .map(([k, n]) => `${RES[k].name}×${n - (res[k] ?? 0)}`);
+    let left = "", enabled = false, status = "";
+    if (it.kind === "road") {
+      left = `余${PIECE_LIMIT.road - me.roads.length}`;
+      const free = myTurn() && t.freeRoads > 0;
+      enabled = free || (ok && canPay(res, it.cost) && me.roads.length < PIECE_LIMIT.road && legalRoads(G, G.you).length > 0);
+      status = free ? `免费×${t.freeRoads}` : "";
+    } else if (it.kind === "village") {
+      left = `余${PIECE_LIMIT.village - me.villages.length}`;
+      enabled = ok && canPay(res, it.cost) && me.villages.length < PIECE_LIMIT.village && legalVillages(G, G.you).length > 0;
+    } else if (it.kind === "city") {
+      left = `余${PIECE_LIMIT.city - me.cities.length}`;
+      enabled = ok && canPay(res, it.cost) && me.villages.length > 0 && me.cities.length < PIECE_LIMIT.city;
+    } else {
+      left = `卡库${G.deckCount}`;
+      enabled = ok && canPay(res, it.cost) && G.deckCount > 0;
+    }
+    if (!status) status = lack.length ? `差 ${lack.join("、")}` : (enabled ? "✓ 可造" : "");
+    return `
+      <button class="build-row ${mode === it.kind ? "active" : ""}" data-kind="${it.kind}" ${enabled ? "" : "disabled"}>
+        <span class="b-name">${it.name}${it.vp ? `<em>${it.vp}</em>` : ""}</span>
+        <span class="b-pips">${pips}</span>
+        <span class="b-status ${lack.length && !status.startsWith("免费") ? "lackText" : "okText"}">${status}</span>
+        <span class="b-left">${left}</span>
+      </button>`;
+  }).join("");
 
-  for (const id of ["btn-road", "btn-village", "btn-city"]) {
-    $(id).classList.toggle("active", mode === $(id).dataset.mode);
+  for (const row of panel.querySelectorAll(".build-row")) {
+    row.onclick = () => {
+      const k = row.dataset.kind;
+      if (k === "dev") { send({ t: "buy_dev" }); return; }
+      mode = mode === k ? null : k;
+      renderBuildPanel();
+      updateHighlights();
+    };
   }
 }
 
-function setBtn(id, enabled) { $(id).disabled = !enabled; }
+// 交易提议面板:按身份给不同操作(发起人选人成交/撤回;被报价方同意/拒绝/还价)
+function renderTradePanel() {
+  const panel = $("trade-panel");
+  const tr = G.phase === "play" ? G.turn?.trade : null;
+  if (!tr) { panel.innerHTML = ""; return; }
+  const chips = (map) => Object.entries(map).filter(([, n]) => n > 0)
+    .map(([k, n]) => `<span class="chip small"><i style="background:${RES[k].color}"></i>${RES[k].name}×${n}</span>`)
+    .join("");
+  let controls = "";
+  if (G.you === tr.by) {
+    controls = (tr.accepted.length
+      ? tr.accepted.map((i) => `<button class="tp-pick primary" data-seat="${i}">与 ${esc(G.seats[i].nick)} 成交</button>`).join("")
+      : `<span class="tp-hint">等待其他玩家表态…</span>`)
+      + `<button id="tp-cancel" class="linkish">撤回</button>`;
+  } else if (tr.by === G.turn.seat) {
+    const acc = tr.accepted.includes(G.you), dec = tr.declined.includes(G.you);
+    controls = `
+      <button id="tp-accept" class="primary" ${acc ? "disabled" : ""}>${acc ? "已同意" : "同意成交"}</button>
+      <button id="tp-decline" ${dec ? "disabled" : ""}>${dec ? "已拒绝" : "拒绝"}</button>
+      <button id="tp-counter">还价</button>`;
+  } else if (G.you === G.turn.seat) {
+    controls = `<button id="tp-accept" class="primary">接受还价</button>`;
+  }
+  panel.innerHTML = `
+    <div class="tp-offer">🤝 ${esc(G.seats[tr.by].nick)} 出 ${chips(tr.give)} <b>求</b> ${chips(tr.want)}</div>
+    <div class="tp-controls">${controls}</div>`;
+  panel.querySelector("#tp-cancel")?.addEventListener("click", () => send({ t: "offer_cancel" }));
+  panel.querySelector("#tp-accept")?.addEventListener("click", () => send({ t: "offer_accept" }));
+  panel.querySelector("#tp-decline")?.addEventListener("click", () => send({ t: "offer_decline" }));
+  panel.querySelector("#tp-counter")?.addEventListener("click", openOfferModal);
+  for (const b of panel.querySelectorAll(".tp-pick")) {
+    b.onclick = () => send({ t: "offer_pick", seat: +b.dataset.seat });
+  }
+}
+
+function renderActions() {
+  const playing = G.phase === "play";
+  $("actions").classList.toggle("hidden", !playing);
+  if (!playing) return;
+  const t = G.turn;
+  const me = G.seats[G.you];
+  const ok = myTurn() && t.rolled && !t.pending;
+  const canCounter = !myTurn() && t.rolled && !t.pending && G.you >= 0;
+  $("btn-offer").disabled = !(ok || canCounter);
+  $("btn-offer").textContent = myTurn() || G.you < 0 ? "发起交易" : `向 ${G.seats[t.seat].nick} 提议`;
+  const rates = getRates(G, G.you);
+  $("btn-trade").disabled = !(ok && RES_KEYS.some((k) => (me?.res?.[k] ?? 0) >= rates[k]));
+  $("btn-end").disabled = !ok;
+}
 
 function renderLog() {
   const el = $("log");
@@ -527,12 +620,13 @@ function openInventModal() {
 
 function openTradeModal() {
   const me = G.seats[G.you];
+  const rates = getRates(G, G.you);
   let give = null, get = null;
   openModal("trade", `
-    <h3>4:1 银行交换</h3>
-    <p>付出 4 张:</p>
-    <div class="res-pick" id="tr-give">${RES_KEYS.filter((k) => me.res[k] >= 4).map((k) => `
-      <button class="chip big" data-res="${k}"><i style="background:${RES[k].color}"></i>${RES[k].name}(有 ${me.res[k]})</button>`).join("")}
+    <h3>银行/港口兑换</h3>
+    <p>付出(按你的港口汇率):</p>
+    <div class="res-pick" id="tr-give">${RES_KEYS.filter((k) => me.res[k] >= rates[k]).map((k) => `
+      <button class="chip big" data-res="${k}"><i style="background:${RES[k].color}"></i>${RES[k].name} <b>${rates[k]}:1</b>(有 ${me.res[k]})</button>`).join("")}
     </div>
     <p>换取 1 张:</p>
     <div class="res-pick" id="tr-get">${RES_KEYS.map((k) => `
@@ -549,6 +643,46 @@ function openTradeModal() {
   for (const btn of $("tr-get").querySelectorAll("[data-res]")) btn.onclick = () => { get = btn.dataset.res; refresh(); };
   $("tr-ok").onclick = () => { send({ t: "bank_trade", give, get }); closeModal(); };
   $("tr-cancel").onclick = closeModal;
+}
+
+// 发起交易 / 还价:两组步进器(给出上限=手牌)
+function openOfferModal() {
+  const me = G.seats[G.you];
+  const give = Object.fromEntries(RES_KEYS.map((k) => [k, 0]));
+  const want = Object.fromEntries(RES_KEYS.map((k) => [k, 0]));
+  const row = (k, side) => `
+    <div class="pick-row" data-side="${side}" data-res="${k}">
+      <span class="chip"><i style="background:${RES[k].color}"></i>${RES[k].name}${side === "give" ? `(有 ${me.res[k]})` : ""}</span>
+      <span class="stepper"><button class="minus">−</button><b class="n">0</b><button class="plus">＋</button></span>
+    </div>`;
+  openModal("offer", `
+    <h3>${myTurn() ? "发起交易" : `向 ${esc(G.seats[G.turn.seat].nick)} 还价`}</h3>
+    <p class="modal-status"><b>我给出:</b></p>
+    ${RES_KEYS.filter((k) => me.res[k] > 0).map((k) => row(k, "give")).join("") || "<p class='modal-status'>(你没有手牌)</p>"}
+    <p class="modal-status"><b>我想要:</b></p>
+    ${RES_KEYS.map((k) => row(k, "want")).join("")}
+    <p class="err" id="of-err"></p>
+    <button id="of-ok" class="primary big" disabled>提出交易</button>
+    <button id="of-cancel" class="linkish">取消</button>`);
+  const refresh = () => {
+    let sg = 0, sw = 0, overlap = false;
+    for (const k of RES_KEYS) {
+      sg += give[k];
+      sw += want[k];
+      if (give[k] > 0 && want[k] > 0) overlap = true;
+    }
+    $("of-err").textContent = overlap ? "同种资源不能既给又要" : "";
+    $("of-ok").disabled = !(sg > 0 && sw > 0 && !overlap);
+  };
+  for (const r of $("modal").querySelectorAll(".pick-row")) {
+    const k = r.dataset.res;
+    const m = r.dataset.side === "give" ? give : want;
+    const cap = r.dataset.side === "give" ? me.res[k] : 9;
+    r.querySelector(".plus").onclick = () => { if (m[k] < cap) { m[k]++; r.querySelector(".n").textContent = m[k]; refresh(); } };
+    r.querySelector(".minus").onclick = () => { if (m[k] > 0) { m[k]--; r.querySelector(".n").textContent = m[k]; refresh(); } };
+  }
+  $("of-ok").onclick = () => { send({ t: "offer", give, want }); closeModal(); };
+  $("of-cancel").onclick = closeModal;
 }
 
 function openResultModal() {
@@ -604,22 +738,6 @@ function requireNick() {
 
 function init() {
   $("nick").value = localStorage.getItem("dao-nick") ?? "";
-
-  // 造价对照表(悬停色块可看资源名)
-  const dots = (cost) => Object.entries(cost)
-    .flatMap(([k, n]) => Array(n).fill(`<i class="cost-dot" style="background:${RES[k].color}" title="${RES[k].name}"></i>`))
-    .join("");
-  const costRow = (label, cost) =>
-    `<div class="cost-row"><span>${label}</span><span class="cost-dots">${dots(cost)}</span></div>`;
-  $("costs").innerHTML =
-    `<div class="costs-title">造价表</div>` +
-    costRow("道路", COSTS.road) +
-    costRow("村庄 <b>1分</b>", COSTS.village) +
-    costRow("城邑 <b>2分</b>", COSTS.city) +
-    costRow("发展卡", COSTS.dev) +
-    `<div class="cost-row"><span>银行兑换</span><span>同种×4 换任意×1</span></div>` +
-    `<div class="cost-legend">${RES_KEYS.map((k) =>
-      `<span><i class="cost-dot" style="background:${RES[k].color}"></i>${RES[k].name}</span>`).join("")}</div>`;
   $("btn-create").onclick = createRoom;
   $("btn-join").onclick = () => {
     if (!requireNick()) return;
@@ -633,16 +751,8 @@ function init() {
   $("btn-start").onclick = () => send({ t: "start", winVP: +$("win-vp").value });
   $("btn-roll").onclick = () => send({ t: "roll" });
   $("btn-end").onclick = () => { mode = null; send({ t: "end" }); };
-  $("btn-buydev").onclick = () => send({ t: "buy_dev" });
   $("btn-trade").onclick = openTradeModal;
-  for (const id of ["btn-road", "btn-village", "btn-city"]) {
-    $(id).onclick = () => {
-      const m = $(id).dataset.mode;
-      mode = mode === m ? null : m;
-      renderActions();
-      updateHighlights();
-    };
-  }
+  $("btn-offer").onclick = openOfferModal;
   $("chat").addEventListener("keydown", (e) => {
     if (e.key === "Enter" && $("chat").value.trim()) {
       send({ t: "chat", text: $("chat").value });
