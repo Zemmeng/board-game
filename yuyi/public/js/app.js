@@ -13,6 +13,15 @@ const colorOf = (c) => (isWild(c) ? null : c[0]);
 const valOf = (c) => (isWild(c) ? c : c.slice(1));
 const GLYPH = { s: "⃠", r: "⇄", d: "+2", w: "✦", W: "+4" };
 
+// 对手在桌沿上的落座点(百分比,按人数排布;自己永远在下方手牌区)
+const SEAT_POS = {
+  1: [[50, 8]],
+  2: [[19, 30], [81, 30]],
+  3: [[16, 42], [50, 8], [84, 42]],
+  4: [[14, 48], [30, 11], [70, 11], [86, 48]],
+  5: [[13, 52], [23, 17], [50, 7], [77, 17], [87, 52]],
+};
+
 function playableCard(card, top, color) {
   if (isWild(card)) return true;
   if (colorOf(card) === color) return true;
@@ -23,6 +32,7 @@ let ws = null, G = null, code = null;
 let joined = false, leaving = false, modalKind = null;
 let unoArmed = false;
 let lastPileKey = null;
+let lastTurnSeat = null; // 上一帧轮到谁 —— 弃牌堆变了就说明是 TA 刚出的牌
 
 const token = (() => {
   let t = sessionStorage.getItem("yuyi-token");
@@ -108,6 +118,40 @@ function onMsg(m) {
   }
 }
 
+// ---------- 特效 ----------
+// 服务端每次推 state 都整体重渲染,所以动画一律靠「新旧状态对比」触发:
+// 先在 render() 开头算出这一帧该放什么,渲染完再把 class 挂到新生成的节点上。
+
+const fxPrev = { hand: null, color: null, round: null, counts: null };
+
+function fxAdd(node, ms) {
+  $("fx").appendChild(node);
+  setTimeout(() => node.remove(), ms);
+}
+
+function sealDrop() {
+  const d = document.createElement("div");
+  d.className = "fx-seal";
+  d.textContent = "余一";
+  fxAdd(d, 1200);
+}
+
+function ripple(hex) {
+  const d = document.createElement("div");
+  d.className = "fx-ripple";
+  d.style.background = `radial-gradient(circle, ${hex}00 42%, ${hex}b0 60%, ${hex}00 70%)`;
+  fxAdd(d, 900);
+}
+
+function jolt(id, cls, ms) {
+  const el = $(id);
+  if (!el) return;
+  el.classList.remove(cls);
+  void el.offsetWidth; // 强制重排,让同名动画能连着放第二次
+  el.classList.add(cls);
+  setTimeout(() => el.classList.remove(cls), ms);
+}
+
 // ---------- 渲染 ----------
 
 function render() {
@@ -118,6 +162,16 @@ function render() {
     return;
   }
   show("game");
+
+  // 渲染前先算差异(渲染会把旧节点全换掉)
+  const handLen = G.seats[G.you]?.hand?.length ?? null;
+  const counts = G.seats.map((s) => s.handCount);
+  const dealing = handLen !== null && (fxPrev.hand === null || G.round !== fxPrev.round);
+  const drew = !dealing && handLen !== null && fxPrev.hand !== null
+    ? Math.max(0, handLen - fxPrev.hand) : 0;
+  const colorChanged = fxPrev.color && G.color && G.color !== fxPrev.color;
+  const wentUno = fxPrev.counts && counts.some((n, i) => n === 1 && fxPrev.counts[i] !== 1);
+
   renderPlayers();
   renderBanner();
   renderCenter();
@@ -125,6 +179,22 @@ function render() {
   renderHand();
   renderLog();
   maybeModals();
+
+  const hand = [...$("hand").children];
+  if (dealing) {
+    hand.forEach((el, i) => { el.style.setProperty("--i", i); el.classList.add("deal"); });
+  } else if (drew > 0) {
+    hand.slice(-drew).forEach((el, i) => { el.style.setProperty("--i", i); el.classList.add("flip"); });
+    if (drew >= 2) jolt("hand", "tremble", 420); // 被抓 / 吃罚牌
+  }
+  if (colorChanged) ripple(COLOR_INFO[G.color]?.hex ?? "#f4ead3");
+  if (wentUno) sealDrop();
+
+  fxPrev.hand = handLen;
+  fxPrev.color = G.color;
+  fxPrev.round = G.round;
+  fxPrev.counts = counts;
+  lastTurnSeat = G.turn?.seat ?? lastTurnSeat;
 }
 
 function renderLobby() {
@@ -152,21 +222,46 @@ function renderLobby() {
 const myTurn = () => G.phase === "play" && G.turn?.seat === G.you && !G.pending;
 
 function renderPlayers() {
-  $("players").innerHTML = G.seats.map((s, i) => {
+  // 围坐:自己固定在下方(手牌区),其余人按出牌顺序沿桌沿从左、经上、到右排开
+  const others = [];
+  for (let k = 1; k < G.seats.length; k++) others.push((G.you + k) % G.seats.length);
+  const pos = SEAT_POS[others.length] ?? SEAT_POS[5];
+
+  $("players").innerHTML = others.map((i, k) => {
+    const s = G.seats[i];
     const active = G.phase === "play" && G.turn?.seat === i;
     const vul = G.vulnerable?.seat === i;
+    const fan = Array.from({ length: Math.min(s.handCount, 8) }, (_, n) =>
+      `<i style="--n:${n - Math.min(s.handCount, 8) / 2}"></i>`).join("");
     return `
-    <div class="player ${active ? "active" : ""}">
-      <img class="pav" src="img/avatar-${(i % 6) + 1}.jpg" alt="" style="box-shadow:0 0 0 2px ${s.color}">
-      <span class="dot" style="background:${s.color}"></span>
-      <span class="pname">${esc(s.nick)}${i === G.you ? "(你)" : ""}</span>
-      ${s.isBot ? '<span title="机器人">🤖</span>' : `<span class="conn ${s.connected ? "on" : ""}"></span>`}
-      <span class="pstat" title="手牌数">🂠${s.handCount}</span>
-      ${G.target !== 0 ? `<span class="pvp" title="累计分数">${s.score}分</span>` : ""}
+    <div class="seat ${active ? "active" : ""}" data-seat="${i}"
+         style="left:${pos[k][0]}%; top:${pos[k][1]}%">
+      <div class="sfan">${fan}</div>
+      <div class="sinfo">
+        <img class="pav" src="img/avatar-${(i % 6) + 1}.jpg" alt="" style="box-shadow:0 0 0 2px ${s.color}">
+        <span class="pname">${esc(s.nick)}</span>
+        ${s.isBot ? '<span title="机器人">🤖</span>' : `<span class="conn ${s.connected ? "on" : ""}"></span>`}
+        <span class="pstat" title="手牌数">🂠${s.handCount}</span>
+        ${G.target !== 0 ? `<span class="pvp" title="累计分数">${s.score}分</span>` : ""}
+      </div>
       ${s.handCount === 1 ? '<span class="one">余1</span>' : ""}
       ${vul ? '<span class="vul">没喊!</span>' : ""}
     </div>`;
-  }).join("");
+  }).join("") + meSeatHtml();
+}
+
+function meSeatHtml() {
+  const me = G.seats[G.you];
+  const active = G.phase === "play" && G.turn?.seat === G.you;
+  return `
+    <div class="seat me ${active ? "active" : ""}" data-seat="${G.you}">
+      <div class="sinfo">
+        <img class="pav" src="img/avatar-${(G.you % 6) + 1}.jpg" alt="" style="box-shadow:0 0 0 2px ${me.color}">
+        <span class="pname">${esc(me.nick)}(你)</span>
+        <span class="pstat" title="手牌数">🂠${me.handCount}</span>
+        ${G.target !== 0 ? `<span class="pvp" title="累计分数">${me.score}分</span>` : ""}
+      </div>
+    </div>`;
 }
 
 function renderBanner() {
@@ -221,7 +316,21 @@ function renderCenter() {
   const pileKey = G.pileTop + "|" + (G.v ?? "");
   $("pile").innerHTML = G.pileTop ? cardHtml(G.pileTop, "big-card") : "";
   if (lastPileKey !== null && lastPileKey.split("|")[0] !== G.pileTop) {
-    $("pile").firstElementChild?.classList.add("pop");
+    const el = $("pile").firstElementChild;
+    if (el) {
+      // 让牌从「刚出牌那个人」的座位飞过来
+      const src = lastTurnSeat === G.you
+        ? $("hand")
+        : document.querySelector(`.seat[data-seat="${lastTurnSeat}"]`);
+      if (src) {
+        const a = src.getBoundingClientRect(), b = el.getBoundingClientRect();
+        el.style.setProperty("--fx", `${a.left + a.width / 2 - (b.left + b.width / 2)}px`);
+        el.style.setProperty("--fy", `${a.top + a.height / 2 - (b.top + b.height / 2)}px`);
+      }
+      el.classList.add("fly");
+    }
+    const v = valOf(G.pileTop ?? "");
+    if (v === "d" || v === "W") jolt("game", "quake", 460); // +2 / +4 落桌
   }
   lastPileKey = pileKey;
 

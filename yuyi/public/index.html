@@ -50,16 +50,18 @@
 
   <!-- 对局 -->
   <section id="game" class="screen hidden">
-    <div id="players"></div>
     <div id="banner"></div>
-    <div id="center">
-      <div id="deck-wrap">
-        <div id="deck" class="ucard back" title="点击摸牌"><span>余一</span></div>
-        <div id="deck-count" class="pile-hint"></div>
-      </div>
-      <div id="pile-wrap">
-        <div id="pile"></div>
-        <div class="pile-hint">弃牌堆</div>
+    <div id="felt">
+      <div id="players"></div>
+      <div id="center">
+        <div id="deck-wrap">
+          <div id="deck" class="ucard back" title="点击摸牌"><span>余一</span></div>
+          <div id="deck-count" class="pile-hint"></div>
+        </div>
+        <div id="pile-wrap">
+          <div id="pile"></div>
+          <div class="pile-hint">弃牌堆</div>
+        </div>
       </div>
       <div id="side-info">
         <div id="color-ind"></div>
@@ -70,8 +72,9 @@
     <div id="alerts"></div>
     <div id="hand-wrap">
       <div id="hand"></div>
-      <button id="btn-uno" class="hidden">❗ 余一!</button>
+      <button id="btn-uno" class="hidden" title="喊「余一」">余一</button>
     </div>
+    <div id="fx"></div>
     <div id="bottom-row">
       <div id="log"></div>
       <input id="chat" maxlength="120" placeholder="聊两句…" autocomplete="off">
