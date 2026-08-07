@@ -278,8 +278,10 @@ function renderPhasePanel(v) {
     for (const el of p.querySelectorAll(".tile")) {
       el.onclick = () => {
         const t = +el.dataset.t;
-        const i = swapPick.indexOf(t);
-        if (i >= 0) swapPick.splice(i, 1);
+        // ⚠️ 取消选中要看**点的是不是已选中的那一张**,不能拿牌值去 indexOf ——
+        // 手里有三张五万时,点第二张会 indexOf 到第一张、把它取消掉,
+        // 结果永远凑不满三张。而换三张时手上正好有刻子是很常见的事。
+        if (el.classList.contains("sel")) swapPick.splice(swapPick.indexOf(t), 1);
         else {
           if (swapPick.length >= 3) return;
           if (swapPick.length && (swapPick[0] / 9 | 0) !== (t / 9 | 0)) { toast("三张要同花色"); return; }
