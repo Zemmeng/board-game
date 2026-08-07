@@ -7,6 +7,7 @@ import {
   EDICTS, RUMORS, shuffle, groupTiles, hasMonopoly, rentOf,
   mortgageValue, redeemCost, netWorth, maxRaisable,
 } from "../public/js/shared/board.js";
+import { decide, actorOf } from "./ai.js";
 
 const IDLE_WIPE_MS = 24 * 60 * 60 * 1000; // 闲置一天后清房
 const BOT_NICKS = ["坊客·甲", "坊客·乙", "坊客·丙", "坊客·丁", "坊客·戊"];
@@ -841,6 +842,7 @@ export class FangshiRoom {
     }
 
     this.g.pending = { t: "trade", from: seat, to, give, want, giveCash, wantCash, givePardon, wantPardon };
+    this.g.turn.offered = (this.g.turn.offered ?? 0) + 1; // 每回合限提一次,免得被回绝后无限重提
     this.note(`${this.g.seats[seat].nick} 向 ${target.nick} 提出交易`);
     await this.commit();
     this.broadcast();
@@ -897,6 +899,22 @@ export class FangshiRoom {
       this.broadcast();
       return;
     }
+    // 保险闸:大富翁官方规则不保证终止(谁都不肯让地就能僵到天荒地老),
+    // 网页局不能真挂死,所以回合数触顶就按净资产判胜。阈值取正常局的数倍,平时碰不到。
+    this.g.turns = (this.g.turns ?? 0) + 1;
+    if (this.g.turns > 300 * this.g.seats.length) {
+      const alive = this.g.seats.map((s, i) => i).filter((i) => !this.g.seats[i].bankrupt);
+      alive.sort((a, b) => netWorth(this.g, b) - netWorth(this.g, a));
+      this.g.phase = "ended";
+      this.g.winner = alive[0];
+      this.g.byTimeout = true;
+      this.note(`—— 市集散场,按净资产论胜负 ——`);
+      this.note(`🏆 ${this.g.seats[alive[0]].nick} 以 ${netWorth(this.g, alive[0])} 贯家业胜出`);
+      await this.commit();
+      this.broadcast();
+      return;
+    }
+
     const next = this.nextSeat(seat);
     this.g.turn = { seat: next, doubles: 0, rolled: false, dice: null, canRollAgain: false };
     this.g.pending = null;
@@ -917,10 +935,40 @@ export class FangshiRoom {
     this.broadcast();
   }
 
-  // ---------- 机器人(占位:下一步实现) ----------
+  // ---------- 机器人陪练 ----------
+  // 策略跟无头回归测试共用 src/ai.js 那一份,免得两套逻辑跑偏。
+  // 每步之间留点延迟,让人看清发生了什么;DO 休眠被唤醒时构造器会重新调一次,把回合续上。
 
   scheduleBot() {
     clearTimeout(this.botTimer);
     this.botTimer = null;
+    if (!this.g || this.g.phase !== "play") return;
+    const seat = actorOf(this.g);
+    if (seat < 0 || !this.g.seats[seat]?.isBot) return;
+    this.botTimer = setTimeout(() => this.runBot(seat), 650 + Math.floor(Math.random() * 450));
+  }
+
+  async runBot(seat) {
+    this.botTimer = null;
+    try {
+      if (!this.g || this.g.phase !== "play") return;
+      if (actorOf(this.g) !== seat || !this.g.seats[seat]?.isBot) return;
+      const act = decide(this.g, seat);
+      if (!act) return;
+      const token = this.g.seats[seat].token;
+      await this.handle({ deserializeAttachment: () => ({ token }) }, act);
+    } catch (e) {
+      // 机器人卡死自恢复:出了意外就强行收工,别把整局拖住
+      console.error("机器人出错:", e?.message ?? e);
+      try {
+        const cur = this.cur();
+        if (cur >= 0 && this.g?.seats[cur]?.isBot) {
+          this.g.pending = null;
+          await this.finishTurn(cur);
+        }
+      } catch { /* 实在救不回来就算了 */ }
+      return;
+    }
+    this.scheduleBot(); // 营造/抵押这类动作不会自己续链,统一在这里接上
   }
 }

@@ -1,0 +1,146 @@
+/* 长安坊市 —— 深色夯土底 + 米纸面板,棋盘用 11×11 网格排成一圈 */
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  font-family: "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  background: radial-gradient(ellipse at 50% 25%, #33342a 0%, #171812 72%);
+  color: #f2e8d5;
+}
+.hidden { display: none !important; }
+button {
+  font: inherit; border: none; border-radius: 8px;
+  padding: 6px 12px; background: #4a4535; color: #f2e8d5; cursor: pointer;
+}
+button:hover:not(:disabled) { filter: brightness(1.18); }
+button:disabled { opacity: 0.4; cursor: default; }
+button.primary { background: #c78f3d; color: #24170a; font-weight: 700; }
+button.warn { background: #a04a3a; }
+button.big { padding: 10px 18px; font-size: 16px; }
+button.linkish { background: none; color: #cfc08a; text-decoration: underline; padding: 4px; }
+input {
+  font: inherit; padding: 9px 12px; border-radius: 8px;
+  border: 1px solid #6b6244; background: #211f18; color: #f2e8d5; width: 100%;
+}
+.err { color: #ff9d8a; min-height: 1.2em; }
+.hint { color: #bfae86; font-size: 14px; }
+.hint a { color: #dfc04a; }
+
+/* 首页 / 大厅 */
+.screen { min-height: 100vh; }
+#home, #lobby { display: grid; place-items: center; padding: 20px; }
+.card {
+  background: #f2e8d5; color: #2a2018;
+  border-radius: 14px; padding: 26px; width: min(440px, 94vw);
+  display: flex; flex-direction: column; gap: 13px;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.5);
+}
+.card h1 { margin: 0; font-size: 30px; }
+.h1-sub { font-size: 13px; color: #8a7a5c; margin-left: 9px; letter-spacing: 1px; }
+.card h2 { margin: 0; }
+.tagline { margin: 0; color: #6b5a45; }
+.card .hint { color: #6b5a45; }
+.card .hint a { color: #a3551f; }
+.card input { background: #fff; color: #2a2018; border: 1px solid #c9b89a; }
+.join-row { display: flex; gap: 8px; }
+.join-row input { flex: 1; }
+.room-code { font-family: ui-monospace, monospace; letter-spacing: 3px; color: #a3551f; }
+#lobby-players { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
+#lobby-players li { display: flex; align-items: center; gap: 7px; }
+.tag { font-size: 11px; background: #c9b89a; color: #2a2018; border-radius: 5px; padding: 1px 6px; }
+.dot { width: 13px; height: 13px; border-radius: 50%; flex: none; border: 2px solid rgba(0,0,0,0.3); }
+
+/* 对局布局:棋盘 + 右侧栏 */
+#game { display: flex; gap: 16px; padding: 14px; align-items: flex-start; }
+#board-wrap { flex: 1; min-width: 0; display: grid; place-items: center; }
+#board {
+  width: min(84vh, 100%); aspect-ratio: 1;
+  display: grid; grid-template: repeat(11, 1fr) / repeat(11, 1fr);
+  gap: 2px; padding: 2px;
+  background: #6b5a3c;
+  border: 5px solid #3a2c1a;
+  border-radius: 6px;
+  position: relative;
+}
+
+/* 地格 */
+.cell {
+  background: #efe3c9; color: #2a2018;
+  display: flex; flex-direction: column; overflow: hidden;
+  font-size: 10px; line-height: 1.15; position: relative;
+  padding: 2px;
+}
+.cell .bar { height: 13%; min-height: 6px; margin: -2px -2px 2px; flex: none; }
+.cell .nm { font-weight: 700; font-size: 10.5px; }
+.cell .pr { margin-top: auto; color: #6b5a45; font-size: 9px; }
+.cell.corner { background: #e3d4b2; align-items: center; justify-content: center; text-align: center; }
+.cell.corner .nm { font-size: 12px; }
+.cell.special { background: #e7dcc0; }
+.cell.mine { box-shadow: inset 0 0 0 2px #c78f3d; }
+.cell.mortgaged { filter: grayscale(0.75) brightness(0.85); }
+.cell .own { position: absolute; right: 2px; top: 2px; width: 8px; height: 8px; border-radius: 50%; border: 1px solid rgba(0,0,0,.4); }
+.cell .lv { position: absolute; left: 2px; bottom: 2px; font-size: 9px; font-weight: 800; color: #7a3b2a; }
+
+/* 棋子 */
+.pieces { position: absolute; inset: auto 2px 2px 2px; display: flex; flex-wrap: wrap; gap: 1px; justify-content: center; }
+.pc {
+  width: 15px; height: 15px; border-radius: 50%;
+  display: grid; place-items: center;
+  font-size: 9px; font-weight: 800; color: #fff;
+  border: 1.5px solid rgba(255,255,255,.85);
+  box-shadow: 0 1px 3px rgba(0,0,0,.5);
+  transition: transform .3s ease;
+}
+.pc.active { transform: scale(1.25); box-shadow: 0 0 0 2px #ffe08a, 0 2px 6px rgba(0,0,0,.6); }
+
+/* 棋盘中央 */
+#center {
+  grid-area: 2 / 2 / 11 / 11;
+  display: flex; flex-direction: column; gap: 7px; padding: 10px;
+  background: #24261d; border-radius: 6px; overflow: hidden;
+}
+#banner { font-size: 14px; min-height: 34px; padding: 7px 10px; border-radius: 7px; background: rgba(0,0,0,.32); }
+#banner.mine { background: #7a5a1d; color: #ffe9b0; font-weight: 700; }
+#dice { display: flex; gap: 8px; justify-content: center; min-height: 40px; align-items: center; }
+.die {
+  width: 38px; height: 38px; border-radius: 8px; background: #f2e8d5; color: #2a2018;
+  display: grid; place-items: center; font-size: 20px; font-weight: 800;
+  box-shadow: 0 3px 8px rgba(0,0,0,.5);
+}
+#actions { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+#log { flex: 1; overflow-y: auto; font-size: 12.5px; line-height: 1.55; color: #d8cdb0; }
+#log div { padding: 1px 0; }
+#chat { flex: none; }
+
+/* 右侧栏 */
+#side { width: 290px; flex: none; display: flex; flex-direction: column; gap: 10px; max-height: calc(100vh - 28px); overflow-y: auto; }
+.panel { background: rgba(0,0,0,.3); border-radius: 10px; padding: 10px; }
+.panel h3 { margin: 0 0 7px; font-size: 13px; color: #bfae86; font-weight: 600; }
+.pl { display: flex; align-items: center; gap: 7px; padding: 5px 7px; border-radius: 8px; font-size: 13.5px; }
+.pl.turn { background: rgba(255, 217, 122, 0.18); box-shadow: inset 0 0 0 1.5px #dfc04a; }
+.pl.out { opacity: 0.45; text-decoration: line-through; }
+.pl .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pl .cash { font-weight: 700; color: #dfc04a; }
+.est { display: flex; align-items: center; gap: 6px; font-size: 12.5px; padding: 3px 5px; border-radius: 6px; }
+.est .sw { width: 11px; height: 11px; border-radius: 3px; flex: none; }
+.est .nm { flex: 1; }
+.est button { padding: 2px 7px; font-size: 11px; }
+.est.mg { opacity: 0.55; }
+
+#modal-layer { position: fixed; inset: 0; background: rgba(0,0,0,.62); display: grid; place-items: center; z-index: 40; padding: 16px; }
+#modal { gap: 10px; }
+#toast {
+  position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%);
+  background: #2a2018; color: #f2e8d5; padding: 10px 16px; border-radius: 9px; z-index: 60;
+  box-shadow: 0 6px 20px rgba(0,0,0,.55);
+}
+
+@media (max-width: 900px) {
+  #game { flex-direction: column; padding: 8px; }
+  #side { width: 100%; max-height: none; }
+  #board { width: min(96vw, 620px); }
+  .cell { font-size: 8.5px; }
+  .cell .nm { font-size: 9px; }
+  .cell .pr { font-size: 8px; }
+  .pc { width: 12px; height: 12px; font-size: 8px; }
+}

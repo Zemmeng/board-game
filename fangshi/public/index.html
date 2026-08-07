@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>长安坊市</title>
+  <meta name="description" content="长安坊市——唐长安主题的买地收租联机桌游,2~6 人,集齐整坊组即可营造店铺商号。">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='14' fill='%232c4a3a'/><rect x='20' y='20' width='60' height='60' fill='none' stroke='%23dfc04a' stroke-width='7'/><rect x='38' y='38' width='24' height='24' fill='%23c8503f'/></svg>">
+  <!-- 改 CSS/JS 后把 ?v= 都 +1 -->
+  <link rel="stylesheet" href="style.css?v=1">
+</head>
+<body>
+
+  <!-- 首页 -->
+  <section id="home" class="screen">
+    <div class="card">
+      <h1>长安坊市<span class="h1-sub">cháng ān fāng shì</span></h1>
+      <p class="tagline">唐长安的置业局 · 2~6 人 · 集齐整组坊里,便可营造店铺与商号</p>
+      <input id="nick" maxlength="12" placeholder="你的名号" autocomplete="off">
+      <button id="btn-create" class="primary big">开设新局</button>
+      <div class="join-row">
+        <input id="join-code" maxlength="5" placeholder="房间码" autocomplete="off">
+        <button id="btn-join" class="big">加入</button>
+      </div>
+      <p id="home-err" class="err"></p>
+      <p class="hint"><a href="https://games.wawazhiliao.com">← 返回桌游合集</a></p>
+    </div>
+  </section>
+
+  <!-- 大厅 -->
+  <section id="lobby" class="screen hidden">
+    <div class="card">
+      <h2>房间码 <span id="lobby-code" class="room-code"></span></h2>
+      <p class="hint">把房间码或本页链接发给朋友即可加入(2~6 人)</p>
+      <ul id="lobby-players"></ul>
+      <div id="host-panel" class="hidden">
+        <button id="btn-addbot">🤖 添加坊客</button>
+        <button id="btn-start" class="primary big">开市</button>
+      </div>
+      <p id="lobby-wait" class="hint"></p>
+      <button id="btn-leave" class="linkish">离开房间</button>
+    </div>
+  </section>
+
+  <!-- 对局 -->
+  <section id="game" class="screen hidden">
+    <div id="board-wrap">
+      <div id="board">
+        <div id="center">
+          <div id="banner"></div>
+          <div id="dice"></div>
+          <div id="actions"></div>
+          <div id="log"></div>
+          <input id="chat" maxlength="120" placeholder="聊两句…" autocomplete="off">
+        </div>
+      </div>
+    </div>
+    <aside id="side">
+      <div id="players"></div>
+      <div id="estate"></div>
+    </aside>
+  </section>
+
+  <div id="modal-layer" class="hidden"><div id="modal" class="card"></div></div>
+  <div id="toast" class="hidden"></div>
+
+  <script type="module" src="js/app.js?v=1"></script>
+</body>
+</html>
