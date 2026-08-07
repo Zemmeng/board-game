@@ -4,7 +4,10 @@ html, body { height: 100%; }
 body {
   margin: 0;
   font-family: "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
-  background: radial-gradient(ellipse at 50% 25%, #33342a 0%, #171812 72%);
+  background:
+    radial-gradient(ellipse at 50% 25%, rgba(51, 52, 42, 0.55) 0%, rgba(15, 16, 12, 0.9) 72%),
+    url("img/felt.jpg") center / cover fixed,
+    #171812;
   color: #f2e8d5;
 }
 .hidden { display: none !important; }
@@ -97,8 +100,13 @@ input {
 #center {
   grid-area: 2 / 2 / 11 / 11;
   display: flex; flex-direction: column; gap: 7px; padding: 10px;
-  background: #24261d; border-radius: 6px; overflow: hidden;
+  border-radius: 6px; overflow: hidden;
+  /* 长安城俯瞰图垫底,压一层暗色保证上面的字看得清 */
+  background:
+    linear-gradient(rgba(20, 22, 16, 0.82), rgba(20, 22, 16, 0.88)),
+    url("img/center.jpg") center / cover;
 }
+#banner, #log { text-shadow: 0 1px 3px rgba(0, 0, 0, 0.75); }
 #banner { font-size: 14px; min-height: 34px; padding: 7px 10px; border-radius: 7px; background: rgba(0,0,0,.32); }
 #banner.mine { background: #7a5a1d; color: #ffe9b0; font-weight: 700; }
 #dice { display: flex; gap: 8px; justify-content: center; min-height: 40px; align-items: center; }

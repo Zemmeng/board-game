@@ -2,7 +2,7 @@
 import {
   BOARD, GROUPS, CURRENCY, BUILD_NAMES, GO, JAIL, TO_GO,
   groupTiles, hasMonopoly, rentOf, mortgageValue, redeemCost, netWorth,
-} from "./shared/board.js?v=2";
+} from "./shared/board.js?v=3";
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
