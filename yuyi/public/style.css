@@ -249,6 +249,73 @@ input, select {
 @keyframes ripple-out { from { opacity: 0.6; transform: scale(0); } to { opacity: 0; transform: scale(1); } }
 .fx-ripple { position: absolute; inset: -45%; border-radius: 50%; animation: ripple-out 0.85s ease-out forwards; }
 
+/* 挨罚:座位上冒 +N 往上飘 */
+@keyframes badge-rise {
+  0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.5); }
+  25%  { opacity: 1; transform: translate(-50%, -95%) scale(1.3); }
+  100% { opacity: 0; transform: translate(-50%, -210%) scale(1); }
+}
+.fx-badge {
+  position: fixed;
+  font-size: 32px; font-weight: 900; color: #ff7a55;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.65), 0 0 16px rgba(255, 90, 60, 0.7);
+  animation: badge-rise 1s ease-out forwards;
+}
+.seat.hit { box-shadow: 0 0 0 2px #ff6a4d, 0 0 24px rgba(255, 90, 60, 0.7); }
+.seat.hit .sinfo { animation: tremble 0.42s; }
+
+/* 被禁止:禁止符砸在那个座位上 */
+@keyframes skip-slam {
+  0%   { opacity: 0; transform: translate(-50%, -50%) scale(2.8) rotate(-32deg); }
+  45%  { opacity: 1; transform: translate(-50%, -50%) scale(0.9) rotate(0deg); }
+  60%  { transform: translate(-50%, -50%) scale(1.06) rotate(0deg); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1) rotate(0deg); }
+}
+.fx-skip {
+  position: fixed; width: 96px; height: 96px;
+  background: url("img/icon-skip.png") center / contain no-repeat;
+  filter: drop-shadow(0 3px 8px rgba(0, 0, 0, 0.6));
+  animation: skip-slam 0.9s cubic-bezier(0.2, 0.9, 0.3, 1.2) forwards;
+}
+.seat.skipped { filter: grayscale(0.75) brightness(0.62); }
+
+/* 掉头:双鲤在桌心转一圈,转向跟着新的 dir */
+@keyframes rev-spin {
+  0%   { opacity: 0; transform: scale(0.3) rotate(0deg); }
+  30%  { opacity: 0.72; } /* 别盖死中间的牌堆/弃牌堆 */
+  100% { opacity: 0; transform: scale(1.55) rotate(400deg); }
+}
+@keyframes rev-spin-ccw {
+  0%   { opacity: 0; transform: scale(0.3) rotate(0deg); }
+  30%  { opacity: 0.72; } /* 别盖死中间的牌堆/弃牌堆 */
+  100% { opacity: 0; transform: scale(1.55) rotate(-400deg); }
+}
+.fx-rev {
+  width: min(58vw, 330px); aspect-ratio: 1;
+  background: url("img/icon-rev.png") center / contain no-repeat;
+  filter: drop-shadow(0 4px 16px rgba(0, 0, 0, 0.7));
+  animation: rev-spin 1s cubic-bezier(0.2, 0.8, 0.3, 1) forwards;
+}
+.fx-rev.ccw { animation-name: rev-spin-ccw; }
+
+/* 轮到我:屏幕四边金光一脉冲 */
+@keyframes turn-glow { 0%, 100% { opacity: 0; } 35% { opacity: 1; } }
+.fx-turn {
+  position: absolute; inset: 0;
+  box-shadow: inset 0 0 90px 22px rgba(255, 217, 122, 0.55);
+  animation: turn-glow 1.15s ease-out forwards;
+}
+@keyframes banner-pop { 0%, 100% { transform: scale(1); } 25% { transform: scale(1.035); } }
+#banner.ping { animation: banner-pop 0.5s ease-out; }
+
+/* 轮到我却没牌可打:牌堆招手 */
+@keyframes deck-beckon {
+  0%, 100% { box-shadow: 0 0 0 3px #ffd97a, 0 4px 14px rgba(0, 0, 0, 0.5); transform: translateY(0); }
+  50%      { box-shadow: 0 0 0 5px #ffe9a8, 0 0 28px 7px rgba(255, 217, 122, 0.75), 0 10px 18px rgba(0, 0, 0, 0.5); transform: translateY(-6px); }
+}
+#deck.must-draw { animation: deck-beckon 1.1s ease-in-out infinite; }
+.pile-hint.urge { color: #ffd97a; font-weight: 700; }
+
 #btn-sound {
   position: fixed; top: 10px; right: 10px; z-index: 60;
   width: 38px; height: 38px; padding: 0; border-radius: 50%;
@@ -282,8 +349,10 @@ input, select {
 
 @media (prefers-reduced-motion: reduce) {
   #pile .fly, #hand .ucard.deal, #hand .ucard.flip,
-  #game.quake, #hand.tremble, .fx-seal, .fx-ripple { animation: none; }
-  .fx-seal, .fx-ripple { display: none; }
+  #game.quake, #hand.tremble, #banner.ping, #deck.must-draw,
+  .fx-seal, .fx-ripple, .fx-badge, .fx-skip, .fx-rev, .fx-turn { animation: none; }
+  .fx-seal, .fx-ripple, .fx-rev, .fx-turn { display: none; }
+  #deck.must-draw { box-shadow: 0 0 0 5px #ffe9a8, 0 0 28px 7px rgba(255, 217, 122, 0.75); }
 }
 
 /* 手牌 */

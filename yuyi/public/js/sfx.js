@@ -130,6 +130,20 @@ export const sfx = {
     bell(PENTA.徵 * 2, 0.18, 0.95);
   },
 
+  /** 被禁止:一记闷断的「咚」,后面跟一声压住的短噪 */
+  skip() {
+    tone({ freq: 210, to: 60, type: "square", dur: 0.14, gain: 0.24 });
+    noise({ dur: 0.13, freq: 600, to: 160, q: 1.2, gain: 0.22, at: 0.05 });
+  },
+
+  /** 掉头:一个来回的扫频,像风向倒转 */
+  reverse() {
+    noise({ dur: 0.22, freq: 500, to: 4000, q: 2.2, gain: 0.2 });
+    noise({ dur: 0.26, freq: 4000, to: 400, q: 2.2, gain: 0.2, at: 0.2 });
+    tone({ freq: PENTA.商 * 2, to: PENTA.羽 * 2, type: "sine", dur: 0.2, gain: 0.14 });
+    tone({ freq: PENTA.羽 * 2, to: PENTA.商 * 2, type: "sine", dur: 0.24, gain: 0.14, at: 0.2 });
+  },
+
   /** 轮到你:两声轻提示 */
   turn() {
     tone({ freq: PENTA.徵, type: "sine", dur: 0.11, gain: 0.16 });

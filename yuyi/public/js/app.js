@@ -1,5 +1,5 @@
 // 「余一」前端:界面状态机 + WebSocket 客户端(服务端权威,这里只做展示与动作发送)
-import { sfx, ensure as sfxEnsure, isMuted, setMuted } from "./sfx.js?v=3";
+import { sfx, ensure as sfxEnsure, isMuted, setMuted } from "./sfx.js?v=6";
 
 const $ = (id) => document.getElementById(id);
 
@@ -124,7 +124,7 @@ function onMsg(m) {
 // 服务端每次推 state 都整体重渲染,所以动画一律靠「新旧状态对比」触发:
 // 先在 render() 开头算出这一帧该放什么,渲染完再把 class 挂到新生成的节点上。
 
-const fxPrev = { hand: null, color: null, round: null, counts: null, myTurn: false, phase: null };
+const fxPrev = { hand: null, color: null, round: null, counts: null, myTurn: false, phase: null, dir: null };
 
 function fxAdd(node, ms) {
   $("fx").appendChild(node);
@@ -143,6 +143,53 @@ function ripple(hex) {
   d.className = "fx-ripple";
   d.style.background = `radial-gradient(circle, ${hex}00 42%, ${hex}b0 60%, ${hex}00 70%)`;
   fxAdd(d, 900);
+}
+
+/** 把特效节点钉在某个座位的中心(特效层是 fixed 的,座位每帧重渲染也不受影响) */
+function atSeat(seat, node, ms) {
+  const el = document.querySelector(`.seat[data-seat="${seat}"]`);
+  if (!el) return;
+  const r = el.getBoundingClientRect();
+  node.style.left = `${r.left + r.width / 2}px`;
+  node.style.top = `${r.top + r.height / 2}px`;
+  fxAdd(node, ms);
+}
+
+/** 挨罚:座位上冒一个 +N 往上飘 */
+function penaltyBadge(seat, n) {
+  const d = document.createElement("div");
+  d.className = "fx-badge";
+  d.textContent = `+${n}`;
+  atSeat(seat, d, 1000);
+  document.querySelector(`.seat[data-seat="${seat}"]`)?.classList.add("hit");
+}
+
+/** 被禁止:禁止符砸在那个座位上 */
+function skipStamp(seat) {
+  const d = document.createElement("div");
+  d.className = "fx-skip";
+  atSeat(seat, d, 900);
+  document.querySelector(`.seat[data-seat="${seat}"]`)?.classList.add("skipped");
+}
+
+/** 掉头:双鲤在桌心转一圈,方向跟着新的 dir 走 */
+function dirFlipFx(dir) {
+  const d = document.createElement("div");
+  d.className = "fx-rev" + (dir === 1 ? "" : " ccw");
+  fxAdd(d, 1000);
+}
+
+/** 轮到我:屏幕四边金光一脉冲 + 横幅弹一下 + 手机震一下 */
+function turnCue() {
+  const d = document.createElement("div");
+  d.className = "fx-turn";
+  fxAdd(d, 1200);
+  jolt("banner", "ping", 520);
+  // 浏览器要求页面被真实点过才允许震动,没点过时直接调会往控制台刷报错
+  const ua = navigator.userActivation;
+  if (!ua || ua.hasBeenActive) {
+    try { navigator.vibrate?.([28, 55, 28]); } catch { /* 忽略 */ }
+  }
 }
 
 function jolt(id, cls, ms) {
@@ -176,6 +223,21 @@ function render() {
   const colorChanged = fxPrev.color && G.color && G.color !== fxPrev.color && isWild(G.pileTop);
   const wentUno = fxPrev.counts && counts.some((n, i) => n === 1 && fxPrev.counts[i] !== 1);
 
+  // 谁挨罚了:手牌数一次涨 ≥2 就是吃了 +2/+4 或被抓(发牌那一帧不算)
+  const hitSeats = !dealing && fxPrev.counts
+    ? counts.map((n, i) => ({ seat: i, n: n - fxPrev.counts[i] })).filter((h) => h.n >= 2)
+    : [];
+
+  // 谁被禁了:出的是禁止牌 → 打牌人的下家;2 人局反转等同禁止
+  const pileChanged = lastPileKey !== null && lastPileKey.split("|")[0] !== G.pileTop;
+  const n = G.seats.length;
+  const topV = valOf(G.pileTop ?? "");
+  const skippedSeat = pileChanged && lastTurnSeat !== null && (topV === "s" || (topV === "r" && n === 2))
+    ? (n === 2 ? (lastTurnSeat + 1) % 2 : ((lastTurnSeat + G.dir) % n + n) % n)
+    : null;
+
+  const dirFlipped = fxPrev.dir !== null && G.dir !== fxPrev.dir;
+
   renderPlayers();
   renderBanner();
   renderCenter();
@@ -190,15 +252,29 @@ function render() {
     sfx.deal(hand.length);
   } else if (drew > 0) {
     hand.slice(-drew).forEach((el, i) => { el.style.setProperty("--i", i); el.classList.add("flip"); });
-    if (drew >= 2) { jolt("hand", "tremble", 420); sfx.penalty(); } // 被抓 / 吃罚牌
+    if (drew >= 2) jolt("hand", "tremble", 420); // 被抓 / 吃罚牌,响声交给下面统一处理
     else sfx.draw();
   }
   if (colorChanged) { ripple(COLOR_INFO[G.color]?.hex ?? "#f4ead3"); sfx.chime(); }
   if (wentUno) { sealDrop(); sfx.uno(); }
 
+  if (hitSeats.length) {
+    sfx.penalty();
+    for (const h of hitSeats) penaltyBadge(h.seat, h.n);
+  }
+  if (skippedSeat !== null) { skipStamp(skippedSeat); sfx.skip(); }
+  if (dirFlipped) { dirFlipFx(G.dir); sfx.reverse(); }
+
   const nowMyTurn = myTurn();
-  if (nowMyTurn && !fxPrev.myTurn && !dealing) sfx.turn();
+  if (nowMyTurn && !fxPrev.myTurn && !dealing) { sfx.turn(); turnCue(); }
   if (G.phase === "ended" && fxPrev.phase !== "ended") sfx.win();
+
+  // 轮到我却一张都打不出 → 牌堆招手,别让人卡在那不知道该干嘛
+  const myHand = G.seats[G.you]?.hand ?? [];
+  const mustDraw = nowMyTurn && !myHand.some((c) => playableCard(c, G.pileTop, G.color));
+  $("deck").classList.toggle("must-draw", mustDraw);
+  $("deck-count").classList.toggle("urge", mustDraw);
+  if (mustDraw) $("deck-count").textContent = `${G.deckCount} · 点这摸一张`;
 
   fxPrev.hand = handLen;
   fxPrev.color = G.color;
@@ -206,6 +282,7 @@ function render() {
   fxPrev.counts = counts;
   fxPrev.myTurn = nowMyTurn;
   fxPrev.phase = G.phase;
+  fxPrev.dir = G.dir;
   lastTurnSeat = G.turn?.seat ?? lastTurnSeat;
 }
 
