@@ -1,0 +1,18 @@
+{
+  "name": "yuyi",
+  "private": true,
+  "type": "module",
+  "description": "余一——类 UNO 快节奏纸牌联机游戏",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^4"
+  },
+  "allowScripts": {
+    "workerd@1.20260801.1": true,
+    "esbuild@0.28.1": true,
+    "sharp@0.35.2": true
+  }
+}

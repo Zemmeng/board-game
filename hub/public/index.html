@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>仄梦桌游馆</title>
+  <meta name="description" content="仄梦桌游馆——和朋友在浏览器里玩的联机桌游合集:岛屿开拓、余一,开房间就能玩,免下载。">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text x='50' y='72' font-size='64' text-anchor='middle'>🎲</text></svg>">
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh;
+      font-family: "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+      background: radial-gradient(ellipse at 50% 20%, #14425c 0%, #0b2a3d 70%);
+      color: #f2e8d5;
+      display: flex; flex-direction: column; align-items: center;
+      padding: 48px 20px 32px; gap: 34px;
+    }
+    header { text-align: center; }
+    h1 { margin: 0 0 8px; font-size: 40px; letter-spacing: 6px; }
+    .sub { color: #a8c4d4; margin: 0; }
+    .games {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 340px));
+      gap: 24px; justify-content: center; width: 100%; max-width: 780px;
+    }
+    .game {
+      background: #f2e8d5; color: #2a2018;
+      border-radius: 18px; padding: 26px 26px 22px;
+      display: flex; flex-direction: column; gap: 12px;
+      box-shadow: 0 14px 44px rgba(0, 0, 0, 0.45);
+      transition: transform 0.15s ease;
+    }
+    .game:hover { transform: translateY(-4px); }
+    .game h2 { margin: 0; font-size: 24px; display: flex; align-items: center; gap: 10px; }
+    .game p { margin: 0; color: #6b5a45; line-height: 1.7; flex: 1; }
+    .tags { display: flex; flex-wrap: wrap; gap: 6px; }
+    .tags span { background: #e2d3b3; color: #6b5a45; font-size: 12px; border-radius: 6px; padding: 2px 8px; }
+    .enter {
+      display: block; text-align: center; text-decoration: none;
+      background: #c78f3d; color: #24170a; font-weight: 700; font-size: 17px;
+      border-radius: 10px; padding: 12px;
+    }
+    .enter:hover { filter: brightness(1.1); }
+    .icon { width: 44px; height: 44px; flex: none; }
+    footer { color: #7fa0b2; font-size: 14px; text-align: center; line-height: 2; }
+    footer a { color: #9fc3d8; }
+    @media (max-width: 420px) { h1 { font-size: 32px; } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>仄梦桌游馆</h1>
+    <p class="sub">和朋友在浏览器里开房间玩的联机桌游 · 免下载 · 可加机器人陪练</p>
+  </header>
+
+  <div class="games">
+    <div class="game">
+      <h2>
+        <svg class="icon" viewBox="0 0 100 100"><polygon points="50,6 88,28 88,72 50,94 12,72 12,28" fill="#2e7d46" stroke="#c78f3d" stroke-width="6" stroke-linejoin="round"/><circle cx="50" cy="50" r="17" fill="#f6eed8"/><text x="50" y="58" font-size="24" text-anchor="middle" fill="#c0392b" font-weight="bold">8</text></svg>
+        仄梦的岛屿开拓
+      </h2>
+      <p>卡坦式六边形资源开拓:掷骰收资源、修路建村升城、交易谈判、强盗与发展卡,先攒到目标分数者胜。</p>
+      <div class="tags"><span>2~4 人</span><span>策略 · 谈判</span><span>约 40~60 分钟</span><span>🤖 机器人陪练</span></div>
+      <a class="enter" href="https://dao.wawazhiliao.com">进入游戏</a>
+    </div>
+
+    <div class="game">
+      <h2>
+        <svg class="icon" viewBox="0 0 100 100"><rect x="14" y="14" width="52" height="74" rx="10" fill="#3f6fd9" stroke="#f6eed8" stroke-width="5" transform="rotate(-8 40 51)"/><rect x="34" y="12" width="52" height="74" rx="10" fill="#d9484a" stroke="#f6eed8" stroke-width="5" transform="rotate(7 60 49)"/><text x="63" y="60" font-size="34" text-anchor="middle" fill="#fff" font-weight="bold" transform="rotate(7 60 49)">1</text></svg>
+        余一
+      </h2>
+      <p>快节奏纸牌局:对上颜色或数字就能出,禁牌、反转、+2、+4 轮番招呼;手里只剩一张时,记得喊「余一!」</p>
+      <div class="tags"><span>2~6 人</span><span>轻松 · 欢乐</span><span>约 10~20 分钟</span><span>🤖 机器人陪练</span></div>
+      <a class="enter" href="https://yuyi.wawazhiliao.com">进入游戏</a>
+    </div>
+  </div>
+
+  <footer>
+    出自 <a href="https://wawazhiliao.com">wawazhiliao.com</a> · 玩法机制致敬经典桌游,名字与美术均为原创<br>
+    <a href="https://github.com/Zemmeng/board-game">GitHub 源码</a>
+  </footer>
+</body>
+</html>

@@ -3,9 +3,12 @@
 自己写的联机桌游合集,每个游戏一个子目录,各自独立部署到 wawazhiliao.com 的子域名下。
 技术栈:纯前端(SVG)+ Cloudflare Workers + Durable Objects(WebSocket 房间制联机)。
 
+合集门户:**https://games.wawazhiliao.com**([hub/](hub/))
+
 | 游戏 | 目录 | 地址 | 状态 |
 | ---- | ---- | ---- | ---- |
-| 仄梦的岛屿开拓 | [dao/](dao/) | https://dao.wawazhiliao.com | 开发中 |
+| 仄梦的岛屿开拓(卡坦式) | [dao/](dao/) | https://dao.wawazhiliao.com | 可玩 |
+| 余一(类 UNO) | [yuyi/](yuyi/) | https://yuyi.wawazhiliao.com | 可玩 |
 
 ## 本地开发
 

@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>余一</title>
+  <meta name="description" content="余一——2~6 人类 UNO 快节奏纸牌联机游戏,手里只剩一张时记得喊「余一!」">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect x='18' y='8' width='64' height='84' rx='12' fill='%23d9484a' stroke='%23f2e8d5' stroke-width='6'/><text x='50' y='68' font-size='48' text-anchor='middle' fill='%23fff' font-family='sans-serif' font-weight='bold'>1</text></svg>">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- 首页 -->
+  <section id="home" class="screen">
+    <div class="card">
+      <h1>余一<span class="h1-sub">yú yī</span></h1>
+      <p class="tagline">快节奏纸牌局 · 2~6 人 · 手里只剩一张时,记得喊「余一!」</p>
+      <input id="nick" maxlength="12" placeholder="你的昵称" autocomplete="off">
+      <button id="btn-create" class="primary big">创建房间</button>
+      <div class="join-row">
+        <input id="join-code" maxlength="5" placeholder="房间码" autocomplete="off">
+        <button id="btn-join" class="big">加入房间</button>
+      </div>
+      <p id="home-err" class="err"></p>
+      <p class="hint"><a href="https://games.wawazhiliao.com">← 返回桌游合集</a></p>
+    </div>
+  </section>
+
+  <!-- 大厅 -->
+  <section id="lobby" class="screen hidden">
+    <div class="card">
+      <h2>房间码 <span id="lobby-code" class="room-code"></span></h2>
+      <p class="hint">把房间码或本页链接发给朋友即可加入(2~6 人)</p>
+      <ul id="lobby-players"></ul>
+      <div id="host-panel" class="hidden">
+        <label class="vp-label">赛制
+          <select id="target">
+            <option value="500">积分赛 · 先到 500 分</option>
+            <option value="200">积分赛 · 先到 200 分</option>
+            <option value="0">单局定胜负</option>
+          </select>
+        </label>
+        <button id="btn-addbot">🤖 添加机器人</button>
+        <button id="btn-start" class="primary big">开始游戏</button>
+      </div>
+      <p id="lobby-wait" class="hint"></p>
+      <button id="btn-leave" class="linkish">离开房间</button>
+    </div>
+  </section>
+
+  <!-- 对局 -->
+  <section id="game" class="screen hidden">
+    <div id="players"></div>
+    <div id="banner"></div>
+    <div id="center">
+      <div id="deck-wrap">
+        <div id="deck" class="ucard back" title="点击摸牌"><span>余一</span></div>
+        <div id="deck-count" class="pile-hint"></div>
+      </div>
+      <div id="pile-wrap">
+        <div id="pile"></div>
+        <div class="pile-hint">弃牌堆</div>
+      </div>
+      <div id="side-info">
+        <div id="color-ind"></div>
+        <div id="dir-ind"></div>
+        <div id="round-ind"></div>
+      </div>
+    </div>
+    <div id="alerts"></div>
+    <div id="hand-wrap">
+      <div id="hand"></div>
+      <button id="btn-uno" class="hidden">❗ 余一!</button>
+    </div>
+    <div id="bottom-row">
+      <div id="log"></div>
+      <input id="chat" maxlength="120" placeholder="聊两句…" autocomplete="off">
+    </div>
+  </section>
+
+  <!-- 弹窗 -->
+  <div id="modal-layer" class="hidden">
+    <div id="modal" class="card"></div>
+  </div>
+  <div id="toast" class="hidden"></div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
