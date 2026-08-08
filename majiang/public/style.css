@@ -75,11 +75,19 @@ input {
 #opp-1 { right: 6px; }     /* 下家 */
 #opp-3 { left: 6px; }      /* 上家 */
 .opp .who {
-  font-size: 12px; color: #d8cba6; background: rgba(0,0,0,.4);
-  padding: 3px 9px; border-radius: 20px; white-space: nowrap;
+  font-size: 12px; color: #e2d6b4; white-space: nowrap;
+  padding: 4px 11px; border-radius: 20px;
+  background: linear-gradient(rgba(28,20,12,.72), rgba(12,8,4,.72));
+  border: 1px solid rgba(255,225,160,.18);
+  box-shadow: 0 2px 8px rgba(0,0,0,.45);
+  position: relative;
 }
-.opp .who.turn { background: #c9932f; color: #241a08; font-weight: 700; }
-.opp .who.won { background: #a8541c; color: #fff; }
+.opp .who.turn {
+  background: linear-gradient(#e0a53c, #b8791f); color: #241a08; font-weight: 700;
+  border-color: #ffdc8a;
+  box-shadow: 0 0 0 2px rgba(255,214,90,.28), 0 0 18px rgba(255,200,80,.45);
+}
+.opp .who.won { background: linear-gradient(#c0632a, #8c4116); color: #fff2dd; border-color: #ffb07a; }
 .opp .backs { display: flex; gap: 1px; }
 /* 左右两家的牌要竖着摞,横着排 13 张会顶出毡面 */
 .opp.side .backs { flex-direction: column; }
@@ -90,31 +98,59 @@ input {
 
 #center {
   grid-row: 2; display: flex; flex-direction: column; align-items: center;
-  justify-content: center; gap: 8px; min-height: 0; padding: 0 90px;
+  justify-content: center; gap: 6px; min-height: 0; padding: 0 96px;
 }
-#wall-info { font-size: 12.5px; color: #bfae86; }
 #banner {
   font-size: 15px; font-weight: 600; text-align: center; min-height: 22px;
   text-shadow: 0 2px 6px rgba(0,0,0,.7);
 }
 #banner.mine { color: #ffd95e; }
-#river {
-  display: flex; flex-wrap: wrap; gap: 2px; justify-content: center;
-  max-width: 520px; max-height: 40%; overflow: hidden;
+
+/* 四家的弃牌堆在中央,照真牌桌摆成四个方向 —— 原先散在各自座位边上,
+   中间空一大块,整张桌子看着很虚 */
+#rivers { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.rz-mid { display: flex; align-items: center; gap: 8px; }
+.rz {
+  display: flex; flex-wrap: wrap; gap: 2px; justify-content: center; align-content: flex-start;
+  width: 218px; min-height: 30px;
 }
-#river .just { outline: 2px solid #ffd95e; border-radius: 4px; }
+.rz.col { width: 74px; min-height: 132px; }
+.rz .just { outline: 2px solid #ffd95e; border-radius: 5px; }
+#wall-badge {
+  width: 74px; height: 74px; border-radius: 50%; flex: none;
+  display: grid; place-items: center; align-content: center;
+  background: radial-gradient(circle at 40% 34%, rgba(255,238,190,.16), rgba(0,0,0,.42));
+  border: 1px solid rgba(255,225,160,.2);
+  box-shadow: inset 0 2px 12px rgba(0,0,0,.5);
+}
+#wall-badge b { font-size: 22px; font-weight: 800; color: #ffe7ae; line-height: 1; }
+#wall-badge i { font-style: normal; font-size: 10.5px; color: #a9986f; }
 
 #mine { grid-row: 3; display: flex; flex-direction: column; gap: 5px; align-items: center; }
 #my-melds { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; min-height: 0; }
 #my-hand { display: flex; gap: 3px; flex-wrap: wrap; justify-content: center; }
 #my-info { font-size: 12px; color: #bfae86; display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
 
-.tile { cursor: pointer; line-height: 0; border-radius: 7px; transition: transform .1s; position: relative; }
-.tile:hover { transform: translateY(-7px); }
-.tile.sel { transform: translateY(-12px); filter: drop-shadow(0 0 7px #ffd95e); }
-.tile.dead { opacity: .42; cursor: not-allowed; }
+/* 牌:靠双层阴影做出「有厚度、立在桌上」的感觉,而不是一张贴纸 */
+.tile {
+  cursor: pointer; line-height: 0; position: relative;
+  border-radius: 7px;
+  filter: drop-shadow(0 2px 0 rgba(150,138,110,.95)) drop-shadow(0 5px 7px rgba(0,0,0,.45));
+  transition: transform .13s cubic-bezier(.2,1.3,.4,1), filter .13s;
+}
+.tile:hover { transform: translateY(-8px); filter: drop-shadow(0 3px 0 rgba(150,138,110,.95)) drop-shadow(0 9px 12px rgba(0,0,0,.5)); }
+.tile.sel {
+  transform: translateY(-15px);
+  filter: drop-shadow(0 3px 0 rgba(150,138,110,.95)) drop-shadow(0 0 10px #ffd95e) drop-shadow(0 10px 14px rgba(0,0,0,.5));
+}
+.tile.dead { opacity: .38; cursor: not-allowed; filter: grayscale(.6) drop-shadow(0 2px 0 rgba(90,84,66,.9)); }
 .tile.dead:hover { transform: none; }
-.tile.drawn { margin-left: 14px; }
+.tile.drawn { margin-left: 16px; animation: drawin .34s cubic-bezier(.2,1.4,.4,1) both; }
+.tile.static { filter: drop-shadow(0 1px 0 rgba(140,130,105,.85)) drop-shadow(0 2px 4px rgba(0,0,0,.4)); }
+@keyframes drawin {
+  from { transform: translateY(-26px) rotate(-9deg); opacity: 0; }
+  to   { transform: none; opacity: 1; }
+}
 .tile.hintok::after {
   content: ""; position: absolute; left: 50%; bottom: -5px; transform: translateX(-50%);
   width: 6px; height: 6px; border-radius: 50%; background: #6fd08a;
@@ -171,6 +207,54 @@ input {
   box-shadow: 0 6px 20px rgba(0,0,0,.55);
 }
 
+/* ---------- 动效层 ---------- */
+#fx-layer { position: fixed; inset: 0; pointer-events: none; z-index: 50; }
+.fx-fly { position: fixed; left: 0; top: 0; line-height: 0;
+  filter: drop-shadow(0 6px 12px rgba(0,0,0,.6)); }
+.fx-shout {
+  position: fixed; left: 50%; top: 42%;
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  text-align: center; white-space: nowrap;
+}
+.fx-shout b {
+  font-size: clamp(38px, 9vw, 78px); font-weight: 900; letter-spacing: 6px;
+  text-shadow: 0 4px 0 rgba(90,30,10,.85), 0 0 30px rgba(255,190,80,.6);
+}
+.fx-shout i {
+  font-style: normal; font-size: 15px; color: #ffeec4; letter-spacing: 1px;
+  text-shadow: 0 2px 6px rgba(0,0,0,.8);
+}
+.fx-score {
+  position: fixed; font-size: 19px; font-weight: 800; white-space: nowrap;
+  text-shadow: 0 2px 5px rgba(0,0,0,.75);
+}
+.fx-score.up { color: #7ee39a; }
+.fx-score.down { color: #ff8f7a; }
+
+/* 一次性动画类,由 fx.pulse 挂上去 */
+.hit { animation: fxhit .5s ease both; }
+@keyframes fxhit {
+  0%, 100% { transform: none; }
+  25% { transform: translateX(-5px) scale(1.06); }
+  60% { transform: translateX(4px) scale(1.03); }
+}
+.glow { animation: fxglow 1.3s ease both; }
+@keyframes fxglow {
+  0%, 100% { box-shadow: 0 2px 8px rgba(0,0,0,.45); }
+  40% { box-shadow: 0 0 0 4px rgba(255,214,90,.5), 0 0 34px rgba(255,190,70,.85); }
+}
+.myturn { animation: fxmine .7s ease both; }
+@keyframes fxmine {
+  0% { filter: none; }
+  35% { filter: drop-shadow(0 0 16px rgba(255,214,90,.85)); }
+  100% { filter: none; }
+}
+.pop { animation: fxpop .42s cubic-bezier(.2,1.5,.4,1) both; }
+@keyframes fxpop {
+  from { transform: translateX(-50%) scale(.6); opacity: .2; }
+  to   { transform: translateX(-50%) scale(1); opacity: 1; }
+}
+
 @media (max-width: 720px) {
   #center { padding: 0 54px; }
   #acts { bottom: 104px; }
@@ -182,3 +266,6 @@ input {
 @media (prefers-reduced-motion: reduce) {
   .tile, .tile:hover, .tile.sel { transition: none; transform: none; }
 }
+
+/* 可灵牌面(图片版):圆角和厚度跟 SVG 版保持一致 */
+.tile-img { display: block; border-radius: 7px; object-fit: cover; }

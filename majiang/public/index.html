@@ -12,7 +12,7 @@
   <meta property="og:url" content="https://majiang.wawazhiliao.com">
   <meta name="twitter:card" content="summary_large_image">
   <!-- 改 CSS/JS 后把 ?v= 都 +1 -->
-  <link rel="stylesheet" href="style.css?v=2">
+  <link rel="stylesheet" href="style.css?v=5">
 </head>
 <body>
 
@@ -59,9 +59,17 @@
       <div class="opp side" id="opp-3"></div>
 
       <div id="center">
-        <div id="wall-info"></div>
         <div id="banner"></div>
-        <div id="river"></div>
+        <!-- 四家的弃牌都堆在中央,照真牌桌的样子摆成四个方向 -->
+        <div id="rivers">
+          <div class="rz" id="rz-2"></div>
+          <div class="rz-mid">
+            <div class="rz col" id="rz-3"></div>
+            <div id="wall-badge"><b id="wall-info">0</b><i>张</i></div>
+            <div class="rz col" id="rz-1"></div>
+          </div>
+          <div class="rz" id="rz-0"></div>
+        </div>
       </div>
 
       <div id="mine">
@@ -81,6 +89,6 @@
   <div id="modal-layer" class="hidden"><div id="modal" class="card"></div></div>
   <div id="toast" class="hidden"></div>
 
-  <script type="module" src="js/app.js?v=2"></script>
+  <script type="module" src="js/app.js?v=5"></script>
 </body>
 </html>

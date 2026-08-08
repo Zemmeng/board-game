@@ -1,8 +1,9 @@
 // 川麻前端:界面状态机 + WebSocket。服务端权威,这里只展示和发动作。
 // 收到的永远是**按座位裁剪过**的视图(见 shared/view.js),别人的手牌根本不在数据里。
-import { tileSvg, backSvg, tileName } from "./tileface.js?v=1";
-import { SUITS } from "./shared/tiles.js?v=1";
-import { sfx, unlock, toggleMusic } from "./sfx.js?v=1";
+import { tileSvg, backSvg, tileName, loadTileArt } from "./tileface.js?v=3";
+import { SUITS } from "./shared/tiles.js?v=2";
+import { sfx, unlock, toggleMusic } from "./sfx.js?v=2";
+import * as fx from "./fx.js?v=1";
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
@@ -15,10 +16,9 @@ const token = (() => {
 })();
 
 let ws = null, code = null, mySeat = -1, isHost = false;
-let V = null, L = null, joined = false, leaving = false;
+let V = null, prevV = null, L = null, joined = false, leaving = false;
 let sel = -1;                 // 选中的手牌
 let swapPick = [];            // 换三张选中的
-let lastLogLen = 0, prevTurn = -1, prevPhase = "";
 
 const show = (id) => { for (const s of ["home", "lobby", "table"]) $(s).classList.toggle("hidden", s !== id); };
 const nickVal = () => $("nick").value.trim().slice(0, 10) || "无名";
@@ -61,7 +61,13 @@ function onMsg(m) {
     return;
   }
   if (m.t === "lobby") { L = m.l; V = null; renderLobby(); show("lobby"); return; }
-  if (m.t === "state") { V = m.v; renderTable(); show("table"); return; }
+  if (m.t === "state") {
+    const before = V;
+    V = m.v;
+    renderTable(); show("table");
+    runEffects(before, V);          // 先渲染再放特效:飞牌需要新 DOM 当落点
+    return;
+  }
 }
 
 // ---------- 等人 ----------
@@ -89,9 +95,6 @@ const rel = (i) => (i - mySeat + 4) % 4;      // 0 自己 1 下家 2 对家 3 �
 
 function renderTable() {
   const v = V;
-  // 声音:靠日志增量和阶段变化触发
-  playCues(v);
-
   // 三个对家
   for (const s of v.seats) {
     const r = rel(s.seat);
@@ -107,18 +110,23 @@ function renderTable() {
         ${s.won ? " · 已胡" : ""}${s.connected ? "" : " · 掉线"}
       </div>
       <div class="backs">${Array.from({ length: s.handCount }, () => B(w)).join("")}</div>
-      ${s.melds.length ? `<div class="melds">${s.melds.map((m) => meldHtml(m, w)).join("")}</div>` : ""}
-      <div class="disc">${s.discards.map((t) => T(t, { w: w - 2, cls: "static" })).join("")}</div>`;
+      ${s.melds.length ? `<div class="melds">${s.melds.map((m) => meldHtml(m, w)).join("")}</div>` : ""}`;
   }
 
   // 中间
-  $("wall-info").textContent = `剩 ${v.wallLeft} 张`
-    + (v.phase === "play" ? ` · ${["顺时针", "逆时针", "对家"][v.swapDir]}换的三张` : "");
+  $("wall-info").textContent = v.wallLeft;
   $("banner").textContent = bannerText(v);
   $("banner").className = isMyTurn(v) ? "mine" : "";
-  const mine = v.seats[mySeat];
-  $("river").innerHTML = mine ? mine.discards.map((t, i) =>
-    T(t, { w: 24, cls: "static" + (i === mine.discards.length - 1 ? " just" : "") })).join("") : "";
+  // 四家弃牌都摆中央,按相对座位放到上/下/左/右四片
+  const lastDiscarder = v.seats.reduce((a, s) => s.discards.length ? s : a, null);
+  for (const s of v.seats) {
+    const zone = $("rz-" + rel(s.seat));
+    if (!zone) continue;
+    const w = rel(s.seat) === 0 ? 25 : 22;
+    zone.innerHTML = s.discards.map((t, i) => T(t, {
+      w, cls: "static" + (s === lastDiscarder && i === s.discards.length - 1 ? " just" : ""),
+    })).join("");
+  }
 
   // 自己
   renderMyHand(v);
@@ -297,29 +305,71 @@ function renderPhasePanel(v) {
   p.classList.add("hidden");
 }
 
-// ---------- 声音提示 ----------
+// ---------- 特效 + 音效 ----------
+// 全部由「新旧视图对比」驱动。**不解析服务端日志文本** —— 日志是给人看的字符串,
+// 措辞一改特效就全哑了,这是余一那边早就踩过的坑。
 
-function playCues(v) {
-  const logs = v.log ?? [];
-  if (logs.length > lastLogLen) {
-    for (const line of logs.slice(lastLogLen)) {
-      if (line.includes("碰")) sfx.peng();
-      else if (line.includes("杠")) sfx.gang();
-      else if (line.includes("胡") || line.includes("自摸")) sfx.hu();
-      else if (line.includes("打")) sfx.discard();
+const MELD_WORD = { peng: "碰", ming: "杠", an: "暗杠", bu: "补杠" };
+
+function runEffects(prev, cur) {
+  for (const e of fx.diff(prev, cur, mySeat)) {
+    switch (e.t) {
+      case "discard": {
+        const from = fx.seatAnchor(rel(e.seat));
+        fx.flyTile(e.tile, from, $("rz-" + rel(e.seat)), { spin: e.seat !== mySeat });
+        sfx.discard();
+        break;
+      }
+      case "meld": {
+        sfx[e.kind === "peng" ? "peng" : "gang"]();
+        fx.shout(MELD_WORD[e.kind] ?? "碰", {
+          color: e.kind === "peng" ? "#ffd95e" : "#7fd8ff",
+          sub: cur.seats[e.seat]?.nick ?? "",
+        });
+        fx.pulse(seatPlate(e.seat), "hit");
+        break;
+      }
+      case "win": {
+        sfx.hu();
+        const f = e.fan;
+        fx.shout(f?.zimo ? "自 摸" : "胡", {
+          color: "#ff8f5e",
+          sub: f ? `${f.names.join("+")} ×${f.mult}` : "",
+          ms: 1500,
+        });
+        fx.pulse(seatPlate(e.seat), "glow", 1400);
+        if (e.seat === mySeat) fx.buzz([28, 60, 28, 60, 90]);
+        break;
+      }
+      case "score":
+        fx.floatScore(seatPlate(e.seat), e.delta);
+        break;
+      case "myturn":
+        sfx.turn();
+        fx.pulse($("mine"), "myturn");
+        fx.buzz(24);
+        break;
+      case "claim":
+        sfx.turn();
+        fx.pulse($("acts"), "pop");
+        fx.buzz([20, 50, 20]);
+        break;
+      case "draw":
+        sfx.draw();
+        break;
+      case "lack":
+        fx.shout("缺 " + SUITS[e.suit], { color: "#ffd95e", ms: 900 });
+        break;
+      case "phase":
+        if (e.to === "play" && e.from === "swap") { sfx.shuffle(); fx.shout("换三张", { ms: 900 }); }
+        break;
     }
   }
-  lastLogLen = logs.length;
-
-  if (v.phase !== prevPhase) {
-    if (v.phase === "play" && prevPhase === "swap") sfx.shuffle();
-    prevPhase = v.phase;
-  }
-  // 轮到自己了响一声
-  const nowMine = v.phase === "play" && !v.pending && v.turn === mySeat && !v.seats[mySeat]?.won;
-  if (nowMine && prevTurn !== mySeat) sfx.turn();
-  prevTurn = v.pending ? -1 : v.turn;
 }
+
+const seatPlate = (i) => rel(i) === 0
+  ? $("my-info")
+  : $("opp-" + rel(i))?.querySelector(".who");
 
 function prettyLog(line, v) {
   return line.replace(/^(\d) /, (_, d) => (v.seats[+d]?.nick ?? d) + " ")
@@ -404,4 +454,5 @@ function init() {
   if (room) $("join-code").value = room.toUpperCase();
 }
 
+loadTileArt().then(() => { if (V) renderTable(); });
 init();

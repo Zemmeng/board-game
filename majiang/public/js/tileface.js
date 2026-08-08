@@ -80,10 +80,35 @@ export function faceSvg(suit, rank) {
   }).join("");
 }
 
+// ---------- 可灵素材 ----------
+// img/tiles.json 在的话就改用图片牌面(牌坯 + 图案都是可灵出的),
+// 拿不到就继续用下面手画的 SVG —— 素材没就位也不至于开天窗。
+let artSet = null;
+const SUIT_CODE = ["m", "s", "p"];        // 万 / 条 / 筒
+
+export async function loadTileArt() {
+  try {
+    const res = await fetch("img/tiles.json", { cache: "no-cache" });
+    if (!res.ok) return false;
+    artSet = new Set(await res.json());
+    return artSet.size > 0;
+  } catch { return false; }
+}
+
+const artName = (t) => SUIT_CODE[(t / 9) | 0] + ((t % 9) + 1);
+
 /** 一整张牌(含牌身、圆角、高光)。size 是宽度,高按 1.38 比例 */
 export function tileSvg(tileIndex, { w = 46, dim = false, mark = "" } = {}) {
   const suit = (tileIndex / 9) | 0, rank = (tileIndex % 9) + 1;
   const h = Math.round(w * 1.38);
+
+  const key = artName(tileIndex);
+  if (artSet?.has(key)) {
+    return `<img class="tile-img" src="img/tiles/${key}.jpg" width="${w}" height="${h}"
+      alt="${rank}${["万","条","筒"][suit]}" draggable="false"
+      style="${dim ? "filter:brightness(.62)" : ""}">`;
+  }
+
   return `<svg class="tile-svg" width="${w}" height="${h}" viewBox="0 0 100 138"
       xmlns="http://www.w3.org/2000/svg" aria-label="${rank}${["万","条","筒"][suit]}">
     <rect x="1.5" y="1.5" width="97" height="135" rx="12" fill="#f7f2e4" stroke="#b9ac90" stroke-width="2.4"/>
