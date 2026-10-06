@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>真心话 · 猜猜是谁</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text x='50' y='72' font-size='64' text-anchor='middle'>🤫</text></svg>">
+<style>
+  :root { --bg:#1b1424; --card:#2a2035; --line:#3d3049; --text:#f3eaf7; --dim:#a596b3; --accent:#ff6b8b; --ok:#4cc38a; --bad:#e85d5d; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:16px/1.55 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; }
+  main { max-width:560px; margin:0 auto; padding:20px 16px 60px; }
+  h1 { font-size:30px; margin:24px 0 4px; text-align:center; }
+  .sub { color:var(--dim); text-align:center; margin:0 0 24px; font-size:14px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px; margin-bottom:14px; }
+  input, textarea { width:100%; background:#140e1b; color:var(--text); border:1px solid var(--line); border-radius:10px; padding:12px; font:inherit; }
+  textarea { min-height:90px; resize:vertical; }
+  button { background:var(--accent); color:#fff; border:0; border-radius:10px; padding:12px 16px; font:inherit; font-weight:700; cursor:pointer; }
+  button.ghost { background:transparent; border:1px solid var(--line); color:var(--text); font-weight:400; }
+  button:disabled { opacity:.45; cursor:default; }
+  .row { display:flex; gap:10px; margin-top:10px; flex-wrap:wrap; }
+  .row > * { flex:1; }
+  .err { color:var(--bad); min-height:1.4em; margin-top:8px; font-size:14px; }
+  .hidden { display:none !important; }
+  .players { display:flex; flex-wrap:wrap; gap:8px; }
+  .chip { display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border-radius:999px; background:#140e1b; border:1px solid var(--line); font-size:14px; }
+  .chip .dot { width:9px; height:9px; border-radius:50%; }
+  .chip.off { opacity:.45; }
+  .chip .x { color:var(--dim); cursor:pointer; margin-left:2px; }
+  .tag { font-size:12px; color:var(--dim); }
+  .code { font-size:28px; letter-spacing:6px; font-weight:800; text-align:center; }
+  .q { font-size:20px; font-weight:700; }
+  .label { color:var(--dim); font-size:13px; margin-bottom:6px; }
+  .ans { background:#140e1b; border:1px solid var(--line); border-radius:12px; padding:12px; margin-top:10px; white-space:pre-wrap; word-break:break-word; }
+  .ans.ok { border-color:var(--ok); }
+  .ans.bad { border-color:var(--bad); }
+  .picks { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+  .picks button { padding:6px 10px; font-size:14px; font-weight:400; background:transparent; border:1px solid var(--line); color:var(--text); }
+  .picks button.on { background:var(--accent); border-color:var(--accent); color:#fff; }
+  .picks button.used { opacity:.5; }
+  .verdict { margin-top:6px; font-size:14px; }
+  .hist summary { cursor:pointer; color:var(--dim); }
+  .hist .h { border-top:1px solid var(--line); padding:10px 0; font-size:14px; }
+  table { border-collapse:collapse; width:100%; font-size:13px; margin-top:8px; }
+  th, td { padding:6px 4px; text-align:center; border-bottom:1px solid var(--line); white-space:nowrap; }
+  th { color:var(--dim); font-weight:400; }
+  td:first-child, th:first-child { text-align:left; }
+  .toast { position:fixed; left:50%; bottom:24px; transform:translateX(-50%); background:#000c; padding:10px 16px; border-radius:10px; font-size:14px; z-index:9; }
+  .small { font-size:13px; color:var(--dim); }
+  a { color:#ffb3c3; }
+</style>
+</head>
+<body>
+<main>
+  <section id="home">
+    <h1>🤫 真心话 · 猜猜是谁</h1>
+    <p class="sub">房主点一人提问、一人来猜,其他人(含提问者)匿名回答</p>
+    <div class="card">
+      <div class="label">你的昵称</div>
+      <input id="nick" maxlength="12" placeholder="比如:小王">
+      <div class="row"><button id="btn-create">开个新房间</button></div>
+      <div class="row">
+        <input id="room-in" maxlength="5" placeholder="房间码" style="text-transform:uppercase">
+        <button id="btn-join" class="ghost">加入</button>
+      </div>
+      <div class="err" id="home-err"></div>
+    </div>
+    <div class="card small">
+      怎么玩:每轮房主点一个人提问、一个人来猜(可以是同一个人)。提问者出一道真心话题目,除了猜的人以外所有人匿名作答(提问者也答);全部交卷后,猜的人给每条回答配上一个人名,猜中一条 +1 分。然后全员投票要不要公布每条是谁写的,过半赞成才公布;公布了,没被猜中的回答者各 +1 分(不公布就不加,免得分数漏底)。<br><br>
+      <a href="https://games.wawazhiliao.com">← 仄梦桌游馆</a>
+    </div>
+  </section>
+
+  <section id="room" class="hidden">
+    <div class="card">
+      <div class="row" style="margin:0;align-items:center">
+        <div><div class="label">房间码(发给朋友)</div><div class="code" id="code"></div></div>
+        <div style="flex:0 0 auto;display:flex;flex-direction:column;gap:6px">
+          <button class="ghost" id="btn-copy">复制邀请链接</button>
+          <button class="ghost" id="btn-leave">退出房间</button>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="label">玩家 · 分数</div>
+      <div class="players" id="players"></div>
+    </div>
+    <div id="stage"></div>
+    <details class="card hist" id="stats-box"><summary>📊 战绩</summary><div id="stats" style="overflow-x:auto"></div></details>
+    <details class="card hist" id="hist"><summary>往期回顾</summary><div id="hist-body"></div></details>
+  </section>
+</main>
+<div id="toast" class="toast hidden"></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+
+const QUESTIONS = [
+  "你最近一次哭是因为什么?", "你暗恋过在座的谁吗?(可以只说有没有)", "说一件你从没告诉过别人的小秘密",
+  "你做过最尴尬的一件事是什么?", "如果可以删掉人生中的一天,你会删哪天?", "你对在座某个人的第一印象是什么?",
+  "你现在手机里最不想被别人看到的是什么?", "你最近一次撒谎是什么时候、为了什么?", "你理想中的另一半是什么样的?",
+  "你觉得自己最大的缺点是什么?", "有什么事你一直后悔没做?", "你最怕失去的东西是什么?",
+  "你干过最叛逆的一件事?", "你偷偷羡慕过谁?为什么?", "如果明天世界末日,今晚你想和谁待在一起?",
+  "你在网上搜过最奇怪的东西是什么?", "说一个你至今还在记仇的人或事", "你最想对前任说的一句话",
+];
+
+let ws = null, G = null, code = null, joined = false, leaving = false;
+let draft = "", lastKey = "", pick = { asker: null, guesser: null };
+
+const tokenKey = (c) => "caicai-token-" + c;
+function tokenFor(c) {
+  let t = localStorage.getItem(tokenKey(c));
+  if (!t) { t = crypto.randomUUID(); localStorage.setItem(tokenKey(c), t); }
+  return t;
+}
+
+$("nick").value = localStorage.getItem("caicai-nick") || "";
+const nickVal = () => { const n = $("nick").value.trim().slice(0, 12); localStorage.setItem("caicai-nick", n); return n; };
+
+let toastT;
+function toast(m) { const t = $("toast"); t.textContent = m; t.classList.remove("hidden"); clearTimeout(toastT); toastT = setTimeout(() => t.classList.add("hidden"), 2600); }
+
+function show(id) { for (const s of ["home", "room"]) $(s).classList.toggle("hidden", s !== id); }
+
+function connect(c) {
+  code = c.toUpperCase();
+  leaving = false;
+  const proto = location.protocol === "https:" ? "wss" : "ws";
+  ws = new WebSocket(`${proto}://${location.host}/ws?room=${code}`);
+  ws.onopen = () => send({ t: "join", token: tokenFor(code), nick: nickVal() });
+  ws.onmessage = (ev) => onMsg(JSON.parse(ev.data));
+  ws.onclose = () => {
+    if (leaving || !joined) return;
+    toast("连接断开,正在重连…");
+    setTimeout(() => { if (!leaving) connect(code); }, 1500);
+  };
+}
+const send = (o) => { if (ws?.readyState === 1) ws.send(JSON.stringify(o)); };
+
+function goHome(msg) {
+  leaving = true; joined = false; G = null;
+  try { ws?.close(); } catch {}
+  history.replaceState(null, "", location.pathname);
+  $("home-err").textContent = msg || "";
+  show("home");
+}
+
+function onMsg(m) {
+  if (m.t === "joined") { joined = true; history.replaceState(null, "", "?room=" + m.code); show("room"); return; }
+  if (m.t === "left") { localStorage.removeItem(tokenKey(code)); goHome(); return; }
+  if (m.t === "kicked") { localStorage.removeItem(tokenKey(code)); goHome("你被房主请出了房间"); return; }
+  if (m.t === "err") { if (!joined) goHome(m.msg); else toast(m.msg); return; }
+  if (m.t === "state") { G = m.g; render(); }
+}
+
+$("btn-create").onclick = async () => {
+  if (!nickVal()) return ($("home-err").textContent = "先起个昵称吧");
+  const hostToken = crypto.randomUUID();
+  const r = await fetch("/api/create", { method: "POST", body: JSON.stringify({ hostToken }) });
+  if (!r.ok) return ($("home-err").textContent = "创建失败,再试一次");
+  const { code: c } = await r.json();
+  localStorage.setItem(tokenKey(c), hostToken);
+  connect(c);
+};
+$("btn-join").onclick = () => {
+  const c = $("room-in").value.trim().toUpperCase();
+  if (!nickVal()) return ($("home-err").textContent = "先起个昵称吧");
+  if (c.length !== 5) return ($("home-err").textContent = "房间码是 5 位");
+  connect(c);
+};
+$("btn-copy").onclick = async () => {
+  const url = `${location.origin}/?room=${code}`;
+  try { await navigator.clipboard.writeText(url); toast("链接已复制"); } catch { prompt("复制这个链接:", url); }
+};
+$("btn-leave").onclick = () => { if (confirm("确定退出房间?")) send({ t: "leave" }); };
+
+// ---------- 渲染 ----------
+
+const P = (id) => G.players.find((p) => p.id === id);
+const nameOf = (id) => P(id)?.nick ?? "?";
+const chip = (p, extra = "") => `<span class="chip ${p.connected ? "" : "off"}"><span class="dot" style="background:${p.color}"></span>${esc(p.nick)}${extra}</span>`;
+
+function render() {
+  const me = G.me, isHost = G.hostId === me, isAsker = G.askerId === me, isGuesser = G.guesserId === me;
+  $("code").textContent = G.code;
+
+  $("players").innerHTML = G.players.map((p) => {
+    let extra = ` <b>${p.score}</b>`;
+    if (p.id === G.hostId) extra += ` <span class="tag">房主</span>`;
+    if (!["lobby", "setup"].includes(G.phase)) {
+      if (p.id === G.askerId) extra += ` <span class="tag">🎤提问</span>`;
+      if (p.id === G.guesserId) extra += ` <span class="tag">🔍猜</span>`;
+    }
+    if (G.phase === "answer" && G.answered.includes(p.id)) extra += " ✅";
+    if (p.id === me) extra += ` <span class="tag">(我)</span>`;
+    if (isHost && p.id !== me) extra += ` <span class="x" data-kick="${p.id}" title="请离开">✕</span>`;
+    return chip(p, extra);
+  }).join("");
+
+  const asker = nameOf(G.askerId), guesser = nameOf(G.guesserId);
+  let h = "";
+  const qBox = G.question ? `<div class="card"><div class="label">第 ${G.round} 轮 · ${esc(asker)} 的问题</div><div class="q">${esc(G.question)}</div></div>` : "";
+
+  if (G.phase === "lobby") {
+    h = `<div class="card"><div class="label">等人到齐(建议 3 人以上)</div>
+      ${isHost ? `<button id="b-start" style="width:100%">开始游戏</button>` : `<div class="small">等房主开始…</div>`}</div>`;
+  } else if (G.phase === "setup") {
+    if (isHost) {
+      for (const k of ["asker", "guesser"]) if (!P(pick[k])) pick[k] = null;
+      const row = (k) => `<div class="picks">${G.players.map((p) =>
+        `<button data-pick="${k}" data-pid="${p.id}" class="${pick[k] === p.id ? "on" : ""}">${esc(p.nick)}</button>`).join("")}</div>`;
+      h = `<div class="card"><div class="label">第 ${G.round + 1} 轮 · 房主点人</div>
+        <div>🎤 谁来提问?</div>${row("asker")}
+        <div style="margin-top:12px">🔍 谁来猜?(猜的人不答题)</div>${row("guesser")}
+        <div class="row"><button id="b-pick" ${pick.asker && pick.guesser ? "" : "disabled"}>开始这一轮</button></div></div>`;
+    } else {
+      h = `<div class="card"><div class="label">第 ${G.round + 1} 轮</div><div>等房主 <b>${esc(nameOf(G.hostId))}</b> 点人提问和猜…</div></div>`;
+    }
+  } else if (G.phase === "ask") {
+    const who = `<div class="small">🔍 这轮由 <b>${esc(guesser)}</b> 来猜</div>`;
+    if (isAsker) {
+      h = `<div class="card"><div class="label">第 ${G.round} 轮 · 轮到你提问啦(你也要答)</div>${who}
+        <textarea id="q-in" maxlength="120" placeholder="问大家一个真心话问题…" style="margin-top:8px">${esc(draft)}</textarea>
+        <div class="row"><button class="ghost" id="b-rand">🎲 随机一题</button><button id="b-ask">发问</button></div>
+        ${isHost ? `<div class="row"><button class="ghost" id="b-skip">重新点人</button></div>` : ""}</div>`;
+    } else {
+      h = `<div class="card"><div class="label">第 ${G.round} 轮</div><div>等 <b>${esc(asker)}</b> 出题…</div>${who}
+        ${isHost ? `<div class="row"><button class="ghost" id="b-skip">重新点人</button></div>` : ""}</div>`;
+    }
+  } else if (G.phase === "answer") {
+    const n = G.answered.length, total = G.answerers.length;
+    const canForce = (isGuesser || isHost) && n > 0 && n < total;
+    if (G.answerers.includes(me)) {
+      h = qBox + `<div class="card"><div class="label">匿名作答(${n}/${total} 已交)· 交了还能改</div>
+        <textarea id="a-in" maxlength="300" placeholder="写下你的真心话,没人知道是你…">${esc(draft || G.myAnswer || "")}</textarea>
+        <div class="row"><button id="b-ans">${G.myAnswer ? "改一下" : "交卷"}</button></div>
+        ${G.myAnswer ? `<div class="small" style="margin-top:8px">✅ 已交,等其他人…</div>` : ""}
+        ${canForce ? `<div class="row"><button class="ghost" id="b-force">不等了,直接开猜</button></div>` : ""}</div>`;
+    } else {
+      h = qBox + `<div class="card"><div class="label">${isGuesser ? "你是猜的人,大家正在匿名作答" : "你是这轮开始后进来的,下轮再答"}</div>
+        <div>已交 ${n}/${total}</div>
+        ${canForce ? `<div class="row"><button class="ghost" id="b-force">不等了,直接开猜</button></div>` : ""}</div>`;
+    }
+  } else if (G.phase === "guess") {
+    const used = new Set(Object.values(G.guesses));
+    const list = G.answers.map((a, i) => {
+      const g = G.guesses[a.id];
+      const foot = isGuesser
+        ? `<div class="picks">${G.answerers.map((pid) =>
+          `<button data-aid="${a.id}" data-pid="${pid}" class="${g === pid ? "on" : used.has(pid) ? "used" : ""}">${esc(nameOf(pid))}</button>`).join("")}</div>`
+        : a.mine ? `<div class="verdict small">(这条是你写的🤫)</div>` : "";
+      return `<div class="ans"><div class="tag">#${i + 1}</div>${esc(a.text)}${foot}</div>`;
+    }).join("");
+    const allSet = G.answers.every((a) => G.guesses[a.id]);
+    const btns = isGuesser ? `<div class="row"><button id="b-confirm" ${allSet ? "" : "disabled"}>猜好了</button></div>` : "";
+    const title = isGuesser ? "点名字给每条回答配上作者" : `${esc(guesser)} 正在猜…`;
+    h = qBox + `<div class="card"><div class="label">${title}</div>${list}${btns}</div>`;
+  } else if (G.phase === "vote") {
+    const n = G.voters.length, need = Math.floor(n / 2) + 1;
+    const list = G.answers.map((a, i) => `<div class="ans"><div class="tag">#${i + 1}</div>${esc(a.text)}</div>`).join("");
+    const canVote = G.voters.includes(me);
+    h = qBox + `<div class="card"><div class="label">投票:要不要公布每条是谁写的?</div>
+      <div class="q">${esc(guesser)} 猜中了 ${G.hits} / ${G.answers.length} 条</div>
+      <div class="small" style="margin-top:6px">赞成 ${G.yes} 票 · 已投 ${G.voted.length}/${n} · 需要 ${need} 票赞成才公布</div>
+      ${canVote ? `<div class="row">
+        <button id="b-yes" class="${G.myVote === true ? "" : "ghost"}">👀 公布</button>
+        <button id="b-no" class="${G.myVote === false ? "" : "ghost"}">🙈 不公布</button></div>
+        <div class="small" style="margin-top:6px">${G.myVote === null ? "还没投" : "已投,可以改"}</div>` : ""}
+      ${isHost ? `<div class="row"><button class="ghost" id="b-endvote">结束投票(按现在的票数)</button></div>` : ""}
+      ${list}</div>`;
+  } else if (G.phase === "reveal") {
+    const list = G.answers.map((a, i) => {
+      if (!G.published) return `<div class="ans"><div class="tag">#${i + 1}</div>${esc(a.text)}${a.mine ? `<div class="verdict small">(这条是你写的🤫)</div>` : ""}</div>`;
+      return `<div class="ans ${a.ok ? "ok" : "bad"}"><div class="tag">#${i + 1}</div>${esc(a.text)}
+        <div class="verdict">${a.ok ? "✅" : "❌"} 猜:${esc(nameOf(a.guess))} · 其实是 <b>${esc(nameOf(a.by))}</b></div></div>`;
+    }).join("");
+    const head = G.published
+      ? `👀 投票通过,公布!${esc(guesser)} 猜中 ${G.hits}/${G.answers.length}`
+      : `🙈 投票没过半,作者保密。${esc(guesser)} 猜中 ${G.hits}/${G.answers.length}`;
+    const btns = isHost ? `<div class="row"><button id="b-next">下一轮</button></div>` : `<div class="small" style="margin-top:10px">等房主开下一轮…</div>`;
+    h = qBox + `<div class="card"><div class="label">${head}</div>${list}${btns}</div>`;
+  }
+  // 正在打字时别重建输入框(手机键盘会被收起),同一阶段只刷新玩家栏
+  const key = [G.phase, G.round, G.myAnswer, G.askerId, G.guesserId].join("|");
+  renderStats();
+  const typing = document.activeElement?.tagName === "TEXTAREA";
+  if (!(typing && key === lastKey)) $("stage").innerHTML = h;
+  lastKey = key;
+
+  $("hist").classList.toggle("hidden", !G.history.length);
+  $("hist-body").innerHTML = G.history.map((r) => `<div class="h"><b>第 ${r.round} 轮 · ${esc(r.asker)} 问:</b>${esc(r.question)} <span class="tag">(${esc(r.guesser)} 猜)</span>
+    <div class="small">猜中 ${r.hits}/${r.items.length} · ${r.published ? `👀 公布(${r.yes}/${r.total} 赞成)` : `🙈 保密(${r.yes}/${r.total} 赞成)`}</div>
+    ${r.items.map((it) => r.published
+      ? `<div>${it.ok ? "✅" : "❌"} 「${esc(it.text)}」—— ${esc(it.by)}${it.ok ? "" : `(猜成 ${esc(it.guess)})`}</div>`
+      : `<div>🙈 「${esc(it.text)}」</div>`).join("")}</div>`).join("");
+}
+
+function renderStats() {
+  const rows = G.players.slice().sort((a, b) => b.score - a.score).map((p) => {
+    const s = p.stats || {};
+    const rate = s.guessTotal ? Math.round((s.hit / s.guessTotal) * 100) + "%" : "-";
+    return `<tr><td>${esc(p.nick)}</td><td><b>${p.score}</b></td><td>${s.asked || 0}</td><td>${s.guessed || 0}</td>
+      <td>${s.hit || 0}/${s.guessTotal || 0} (${rate})</td><td>${s.answered || 0}</td><td>${s.fooled || 0}</td><td>${s.caught || 0}</td></tr>`;
+  }).join("");
+  $("stats").innerHTML = `<table><tr><th>玩家</th><th>总分</th><th>提问</th><th>当猜家</th><th>猜中</th><th>答题</th><th>骗过</th><th>被猜中</th></tr>${rows}</table>
+    <div class="small" style="margin-top:6px">骗过 / 被猜中 只统计投票公布了的轮次</div>`;
+}
+
+// 输入框内容在重渲染时保住
+document.addEventListener("input", (e) => { if (e.target.id === "q-in" || e.target.id === "a-in") draft = e.target.value; });
+
+document.addEventListener("click", (e) => {
+  const t = e.target.closest("button, [data-kick]");
+  if (!t || !G) return;
+  if (t.dataset.kick) { if (confirm(`请 ${nameOf(t.dataset.kick)} 离开房间?`)) send({ t: "kick", id: t.dataset.kick }); return; }
+  if (t.dataset.pick) { pick[t.dataset.pick] = t.dataset.pid; render(); return; }
+  if (t.dataset.aid) {
+    const cur = G.guesses[t.dataset.aid];
+    send({ t: "guess", aid: t.dataset.aid, pid: cur === t.dataset.pid ? null : t.dataset.pid });
+    return;
+  }
+  switch (t.id) {
+    case "b-start": send({ t: "start" }); break;
+    case "b-pick": send({ t: "pick", asker: pick.asker, guesser: pick.guesser }); break;
+    case "b-rand": { const q = QUESTIONS[Math.floor(Math.random() * QUESTIONS.length)]; draft = q; $("q-in").value = q; break; }
+    case "b-ask": { const v = $("q-in").value.trim(); if (!v) return toast("先写个问题"); send({ t: "ask", text: v }); draft = ""; break; }
+    case "b-skip": send({ t: "skip" }); draft = ""; break;
+    case "b-ans": { const v = $("a-in").value.trim(); if (!v) return toast("写点什么吧"); send({ t: "answer", text: v }); draft = ""; break; }
+    case "b-force": send({ t: "force" }); break;
+    case "b-confirm": send({ t: "confirm" }); break;
+    case "b-next": send({ t: "next" }); break;
+    case "b-yes": send({ t: "vote", yes: true }); break;
+    case "b-no": send({ t: "vote", yes: false }); break;
+    case "b-endvote": send({ t: "endvote" }); break;
+  }
+});
+
+const urlRoom = new URLSearchParams(location.search).get("room");
+if (urlRoom) {
+  $("room-in").value = urlRoom.toUpperCase();
+  // 之前进过这个房间就直接重连;第一次来需要先填昵称
+  if (localStorage.getItem(tokenKey(urlRoom.toUpperCase())) && nickVal()) connect(urlRoom);
+}
+</script>
+</body>
+</html>
