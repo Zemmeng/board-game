@@ -1,0 +1,22 @@
+{
+  "name": "zhenxin",
+  "main": "src/worker.js",
+  "compatibility_date": "2026-08-01",
+  "workers_dev": false,
+  "preview_urls": false,
+  "assets": {
+    "directory": "public",
+    "binding": "ASSETS"
+  },
+  "durable_objects": {
+    "bindings": [
+      { "name": "ROOM", "class_name": "TruthRoom" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["TruthRoom"] }
+  ],
+  "routes": [
+    { "pattern": "zhenxin.wawazhiliao.com", "custom_domain": true }
+  ]
+}

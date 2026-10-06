@@ -1,0 +1,11 @@
+{
+  "name": "zhenxin",
+  "private": true,
+  "type": "module",
+  "description": "匿名真心话——提问、匿名作答、提问者猜每条回答是谁写的",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "test": "node test/e2e.mjs"
+  }
+}
