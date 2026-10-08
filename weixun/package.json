@@ -1,0 +1,11 @@
+{
+  "name": "weixun",
+  "private": true,
+  "type": "module",
+  "description": "微醺局——线下围坐的酒桌小游戏:我是谁、你比我猜、禁忌动作、谁是卧底",
+  "scripts": {
+    "dev": "wrangler dev --port 8792",
+    "deploy": "wrangler deploy",
+    "test": "node test/deal.mjs && node test/api.mjs"
+  }
+}

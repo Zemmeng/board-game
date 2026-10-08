@@ -9,6 +9,7 @@
 | ---- | ---- | ---- | ---- |
 | 仄梦的岛屿开拓(卡坦式) | [dao/](dao/) | https://dao.wawazhiliao.com | 可玩 |
 | 余一(类 UNO) | [yuyi/](yuyi/) | https://yuyi.wawazhiliao.com | 可玩 |
+| 微醺局(线下酒桌小游戏) | [weixun/](weixun/) | https://weixun.wawazhiliao.com | 可玩 |
 
 ## 本地开发
 
