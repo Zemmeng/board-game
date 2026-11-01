@@ -1,12 +1,15 @@
-// WordRoom:「同词相遇」房间 Durable Object,一房一个,最多 2 人
-// 每轮两人各交一个词,都交齐了才在这里比对并广播——揭晓前对方的词只存在服务端,
-// 下发给客户端的只有自己的词和对方「已写好」与否,看 Network 也看不到
+// WordRoom:「同词相遇」房间 Durable Object,一房一个,2~4 人(建房时选,等人时可改)
+// 每轮所有人各交一个词,交齐了才在这里比对并广播——揭晓前别人的词只存在服务端,
+// 下发给客户端的只有自己的词和别人「已写好」与否,看 Network 也看不到
 const IDLE_MS = 30 * 60 * 1000;
 const WORD_MAX = 20;
 const NICK_MAX = 10;
+const MIN_SIZE = 2;
+const MAX_SIZE = 4;
 
 // 判定相同时忽略空格、标点、符号和大小写;NFKC 顺手把全角字母数字归成半角
 export const norm = (s) => String(s).normalize("NFKC").toLowerCase().replace(/[\s\p{P}\p{S}]/gu, "");
+const clampSize = (n) => Math.min(MAX_SIZE, Math.max(MIN_SIZE, Math.trunc(Number(n)) || MIN_SIZE));
 
 class Oops extends Error {}
 
@@ -17,6 +20,7 @@ export class WordRoom {
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair("ping", "pong"));
     ctx.blockConcurrencyWhile(async () => {
       this.g = (await ctx.storage.get("g")) ?? null;
+      if (this.g && !this.g.size) this.g.size = MIN_SIZE; // 加人数之前建的房间都是 2 人房
     });
   }
 
@@ -24,7 +28,9 @@ export class WordRoom {
     const url = new URL(request.url);
     if (url.pathname === "/claim") {
       if (this.g) return new Response("taken", { status: 409 });
-      this.g = { code: url.searchParams.get("code"), players: [], played: 0, best: null };
+      let size = MIN_SIZE;
+      try { size = clampSize(JSON.parse(await request.text()).size); } catch {}
+      this.g = { code: url.searchParams.get("code"), size, players: [], played: 0, best: null };
       this.newGame();
       await this.ctx.storage.put("g", this.g);
       // 建了房没人进,也按无人处理
@@ -54,6 +60,10 @@ export class WordRoom {
     return token && this.g ? this.g.players.find((p) => p.token === token) ?? null : null;
   }
 
+  isOnline(p) {
+    return this.ctx.getWebSockets().some((w) => w.deserializeAttachment()?.token === p.token);
+  }
+
   send(ws, obj) {
     try { ws.send(JSON.stringify(obj)); } catch {}
   }
@@ -74,6 +84,23 @@ export class WordRoom {
           delete g.subs[me.id];
           break;
         case "again": this.newGame(); break;
+        case "resize": {
+          const size = clampSize(msg.size);
+          if (size < g.players.length) throw new Oops(`房里已经有 ${g.players.length} 个人了`);
+          if (size === g.size) return;
+          g.size = size;
+          this.newGame();
+          break;
+        }
+        // 掉线不回来的人会卡住整桌,在线的人可以把 TA 请出去
+        case "kick": {
+          const target = g.players.find((p) => p.id === msg.id);
+          if (!target || target === me) return;
+          if (this.isOnline(target)) throw new Oops(`${target.nick} 还在线,不能移出`);
+          g.players = g.players.filter((p) => p !== target);
+          this.newGame();
+          break;
+        }
         case "leave":
           g.players = g.players.filter((p) => p !== me);
           this.newGame();
@@ -112,19 +139,21 @@ export class WordRoom {
     if (!token) return;
     let p = g.players.find((x) => x.token === token);
     if (!p) {
-      if (g.players.length >= 2) {
-        this.send(ws, { t: "full" });
+      if (g.players.length >= g.size) {
+        this.send(ws, { t: "full", size: g.size });
         ws.close(4001, "room full");
         return;
       }
       const nick = String(msg.nick ?? "").trim().slice(0, NICK_MAX);
-      if (!nick) return this.send(ws, { t: "need-nick", other: g.players[0]?.nick ?? null });
+      if (!nick) {
+        return this.send(ws, { t: "need-nick", others: g.players.map((x) => x.nick), size: g.size });
+      }
       if (g.players.some((x) => x.nick === nick)) {
-        return this.send(ws, { t: "err", msg: "和对方重名了,换个昵称吧", nick: true });
+        return this.send(ws, { t: "err", msg: "和房里的人重名了,换个昵称吧", nick: true });
       }
       p = { id: crypto.randomUUID().slice(0, 8), token, nick };
       g.players.push(p);
-      if (g.players.length === 2) this.newGame();
+      if (g.players.length === g.size) this.newGame();
     }
     ws.serializeAttachment({ token });
     this.send(ws, { t: "joined", id: p.id });
@@ -133,7 +162,7 @@ export class WordRoom {
 
   onSubmit(me, raw) {
     const g = this.g;
-    if (g.players.length < 2) throw new Oops("等对方进了房间再写");
+    if (g.players.length < g.size) throw new Oops("人还没到齐,等等再写");
     if (g.won) throw new Oops("这局已经相遇了,点「再来一局」");
     const word = [...String(raw ?? "").trim().replace(/\s+/g, " ")].slice(0, WORD_MAX).join("");
     const key = norm(word);
@@ -143,10 +172,10 @@ export class WordRoom {
     }
     g.subs[me.id] = word;
 
-    const [a, b] = g.players;
-    if (!(a.id in g.subs && b.id in g.subs)) return;
-    // 两人都交了:比对、揭晓
-    const hit = norm(g.subs[a.id]) === norm(g.subs[b.id]);
+    if (!g.players.every((p) => p.id in g.subs)) return;
+    // 全交齐了:比对、揭晓。所有人写的都一样才算相遇
+    const keys = g.players.map((p) => norm(g.subs[p.id]));
+    const hit = keys.every((k) => k === keys[0]);
     g.history.push({ words: { ...g.subs }, hit });
     g.subs = {};
     if (hit) {
@@ -180,12 +209,13 @@ export class WordRoom {
       t: "state",
       code: g.code,
       me: me.id,
-      phase: g.players.length < 2 ? "wait" : g.won ? "won" : "play",
+      size: g.size,
+      phase: g.players.length < g.size ? "wait" : g.won ? "won" : "play",
       round: g.round,
       players: g.players.map((p) => ({
         id: p.id, nick: p.nick, online: online.has(p.token), ready: p.id in g.subs,
       })),
-      mine: g.subs[me.id] ?? null, // 对方的词绝不下发,只给「已写好」
+      mine: g.subs[me.id] ?? null, // 别人的词绝不下发,只给「已写好」
       history: g.history,
       played: g.played,
       best: g.best,

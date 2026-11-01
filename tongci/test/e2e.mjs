@@ -8,7 +8,9 @@ const check = (name, ok, extra = "") => {
   if (!ok) failed++;
 };
 
-const { code } = await (await fetch(BASE + "/api/create", { method: "POST" })).json();
+const create = async (size) =>
+  (await (await fetch(BASE + "/api/create", { method: "POST", body: JSON.stringify({ size }) })).json()).code;
+let code = await create(2);
 check("创建房间,4 位房间号", /^\d{4}$/.test(code), code);
 const page = await fetch(`${BASE}/r/${code}`);
 check("/r/房间号 能打开页面", page.ok && (await page.text()).includes("同词相遇"));
@@ -43,7 +45,7 @@ check("第一个人进房,等待对方", A.g.phase === "wait");
 // 没带昵称的新人会被要求填昵称
 const N = await client(crypto.randomUUID(), "");
 await N.until((c) => c.msgs.some((m) => m.t === "need-nick"), "need-nick");
-check("没昵称时要求填昵称,并告诉是谁在等", N.msgs.find((m) => m.t === "need-nick").other === "甲");
+check("没昵称时要求填昵称,并告诉是谁在等", N.msgs.find((m) => m.t === "need-nick").others[0] === "甲");
 N.ws.close();
 
 let B = await client(tB, "乙");
@@ -117,5 +119,55 @@ check("不存在的房间提示过期", gm.t === "gone");
 ghost.close();
 
 for (const c of [A2, B]) c.ws.close();
+
+// ---------- 4 人局 ----------
+console.log("\n— 4 人局 —");
+code = await create(4);
+const P = [];
+for (const nick of ["子", "丑", "寅"]) P.push(await client(crypto.randomUUID(), nick));
+await P[0].until(st(P[0], (g) => g.players.length === 3), "三人到");
+check("4 人房到 3 人时还在等人", P[0].g.phase === "wait" && P[0].g.size === 4);
+const tD = crypto.randomUUID();
+P.push(await client(tD, "卯"));
+await P[0].until(st(P[0], (g) => g.phase === "play"), "四人开局");
+check("第 4 人到齐后开局", P[0].g.players.length === 4);
+const E = await client(crypto.randomUUID(), "辰");
+await E.closed;
+check("第 5 人被拒:房间已满", E.msgs.some((m) => m.t === "full" && m.size === 4));
+P[0].send({ t: "resize", size: 3 });
+await P[0].until((c) => c.msgs.at(-1).t === "err");
+check("人数不能改到比房里人还少", /已经有 4/.test(P[0].msgs.at(-1).msg));
+
+// 第 1 轮三人撞词、一人不同 → 不算相遇
+["猫", "猫", "猫"].forEach((w, i) => P[i].send({ t: "submit", word: w }));
+await P[3].until(st(P[3], (g) => g.players.filter((p) => p.ready).length === 3), "三人已写好");
+check("揭晓前第 4 人收不到任何人的词", !sawWord(P[3], "猫"));
+P[3].send({ t: "submit", word: "狗" });
+await P[0].until(st(P[0], (g) => g.round === 2), "第 1 轮揭晓");
+check("3 人相同 1 人不同不算相遇,进第 2 轮", !P[0].g.history[0].hit && P[0].g.phase === "play");
+["老鼠", "老鼠!", " 老 鼠", "LAOSHU"].forEach((w, i) => P[i].send({ t: "submit", word: w }));
+await P[0].until(st(P[0], (g) => g.round === 3), "第 2 轮揭晓");
+check("有一人写法不同(拼音)仍不算相遇", !P[0].g.history[1].hit);
+["老虎", "老虎", "老虎。", "老虎"].forEach((w, i) => P[i].send({ t: "submit", word: w }));
+await P[0].until(st(P[0], (g) => g.phase === "won"), "四人相遇");
+check("4 人都写同一个词:第 3 轮相遇", P[0].g.round === 3 && P[0].g.best === 3);
+
+// 有人掉线不回来:移出 → 等人;改成 3 人 → 直接开局
+P[3].ws.close();
+await P[0].until(st(P[0], (g) => !g.players.find((p) => p.nick === "卯").online), "卯离线");
+P[1].send({ t: "kick", id: P[0].g.players.find((p) => p.nick === "子").id });
+await P[1].until((c) => c.msgs.at(-1).t === "err");
+check("在线的人不能被移出", /还在线/.test(P[1].msgs.at(-1).msg));
+P[1].send({ t: "kick", id: P[0].g.players.find((p) => p.nick === "卯").id });
+await P[0].until(st(P[0], (g) => g.players.length === 3 && g.phase === "wait"), "移出卯");
+check("移出掉线的人后回到等人(3/4)", true);
+P[2].send({ t: "resize", size: 3 });
+await P[0].until(st(P[0], (g) => g.size === 3 && g.phase === "play" && g.round === 1), "改 3 人");
+check("改成 3 人后直接开新局", true);
+const D2 = await client(tD, "");
+await D2.closed;
+check("被移出的人拿旧身份回来,房间已满进不去", D2.msgs.some((m) => m.t === "full"));
+for (const c of P.slice(0, 3)) c.ws.close();
+
 console.log(failed ? `\n${failed} 项失败` : "\n全部通过");
 process.exit(failed ? 1 : 0);

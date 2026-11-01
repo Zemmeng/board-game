@@ -8,10 +8,11 @@ export default {
     const url = new URL(request.url);
 
     if (url.pathname === "/api/create" && request.method === "POST") {
+      const body = await request.text(); // { size: 2~4 }
       // 4 位房间号空间小,撞上还活着的房间就换一个
       for (let i = 0; i < 20; i++) {
         const code = String(1000 + Math.floor(Math.random() * 9000));
-        const res = await room(env, code).fetch(`https://room/claim?code=${code}`, { method: "POST" });
+        const res = await room(env, code).fetch(`https://room/claim?code=${code}`, { method: "POST", body });
         if (res.ok) return Response.json({ code });
       }
       return new Response("busy", { status: 503 });
