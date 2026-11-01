@@ -1,0 +1,11 @@
+{
+  "name": "tongci",
+  "private": true,
+  "type": "module",
+  "description": "同词相遇——两人各写一个词,一轮轮往中间靠,直到写出同一个词",
+  "scripts": {
+    "dev": "wrangler dev --port 8793",
+    "deploy": "wrangler deploy",
+    "test": "node test/e2e.mjs"
+  }
+}

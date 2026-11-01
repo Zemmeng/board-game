@@ -1,0 +1,680 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <title>同词相遇</title>
+  <meta name="description" content="两个人各写一个词,一轮轮往中间靠,直到写出同一个词。开房间发链接就能玩,也能一部手机轮流。">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 72'><circle cx='44' cy='36' r='28' fill='%23e2604a'/><circle cx='76' cy='36' r='28' fill='%232a9a90'/><path d='M60 13.02A28 28 0 0 1 60 58.98A28 28 0 0 1 60 13.02Z' fill='%237d5fd3'/></svg>">
+  <style>
+    :root {
+      --bg: #f6f1e9; --card: #fffdf9; --ink: #2a2420; --muted: #8b8077; --line: #e7ddd0; --soft: #efe7da;
+      --a: #e2604a; --b: #2a9a90; --meet: #7d5fd3; --online: #3cb371;
+      --shadow: 0 6px 24px rgba(60, 40, 20, 0.08);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #141317; --card: #1f1d23; --ink: #efeae3; --muted: #9a938b; --line: #34313a; --soft: #29262e;
+        --a: #d9604c; --b: #2b9990; --meet: #8f72e6; --online: #46c37b;
+        --shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+      }
+    }
+    * { box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; }
+    body {
+      margin: 0; min-height: 100vh; min-height: 100dvh;
+      background: var(--bg); color: var(--ink);
+      font: 16px/1.6 "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
+    }
+    main { max-width: 460px; margin: 0 auto; padding: 16px 16px calc(28px + env(safe-area-inset-bottom)); }
+    [hidden] { display: none !important; }
+    a { color: inherit; }
+    button { font: inherit; color: inherit; }
+
+    .hero { text-align: center; padding: 28px 0 18px; }
+    .logo { width: 120px; height: 72px; }
+    h1 { margin: 6px 0 4px; font-size: 32px; letter-spacing: 6px; }
+    .sub { margin: 0; color: var(--muted); }
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 18px; box-shadow: var(--shadow); }
+    .stack { display: flex; flex-direction: column; gap: 12px; }
+    .center { text-align: center; align-items: stretch; }
+    .row { display: flex; gap: 10px; }
+    .row > .txt { flex: 1; min-width: 0; }
+    .lbl { font-size: 14px; color: var(--muted); margin-bottom: -6px; }
+    .muted { color: var(--muted); margin: 0; font-size: 14px; }
+    .txt {
+      width: 100%; font: inherit; font-size: 18px; padding: 12px 14px;
+      border-radius: 12px; border: 1.5px solid var(--line); background: var(--bg); color: var(--ink); outline: none;
+      -webkit-appearance: none; appearance: none;
+    }
+    .txt:focus { border-color: var(--meet); }
+    .txt.code { letter-spacing: 6px; text-align: center; }
+    .btn {
+      display: block; width: 100%; border: 0; border-radius: 12px; padding: 13px 16px;
+      font-size: 17px; font-weight: 600; background: var(--ink); color: var(--bg); cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .btn:active { transform: scale(0.98); }
+    .btn:disabled { opacity: 0.45; }
+    .btn.ghost { background: transparent; color: var(--ink); border: 1.5px solid var(--line); }
+    .row > .btn { width: auto; flex: none; }
+    .btn.big { margin-top: 14px; padding: 15px; }
+    .chip {
+      border: 1.5px solid var(--line); background: var(--card); border-radius: 999px;
+      padding: 4px 12px; font-size: 14px; cursor: pointer;
+    }
+    .link-btn { border: 0; background: none; padding: 4px; color: var(--muted); font-size: 14px; text-decoration: underline; cursor: pointer; }
+
+    .rules { margin-top: 18px; color: var(--muted); font-size: 15px; }
+    .rules summary { cursor: pointer; color: var(--ink); font-weight: 600; padding: 6px 0; }
+    .rules ol { padding-left: 20px; margin: 6px 0; }
+    .rules li { margin: 4px 0; }
+    .foot { text-align: center; margin-top: 26px; font-size: 14px; color: var(--muted); }
+
+    .topbar { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; min-height: 36px; margin-bottom: 8px; }
+    .topbar > :last-child { justify-self: end; }
+    .back { text-decoration: none; color: var(--muted); font-size: 15px; }
+    .roomno { font-size: 15px; color: var(--muted); }
+    .roomno b { color: var(--ink); letter-spacing: 2px; font-size: 18px; }
+    .conn { background: #e9a23b; color: #2a1a05; border-radius: 10px; padding: 6px 12px; font-size: 14px; text-align: center; margin-bottom: 8px; }
+
+    .players { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 6px 0 14px; }
+    .pl {
+      background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--a);
+      border-radius: 14px; padding: 9px 11px; display: flex; align-items: center; gap: 7px; min-width: 0;
+    }
+    .pl.b { border-left-color: var(--b); }
+    .pl b { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; }
+    .pl small { color: var(--muted); font-size: 12px; white-space: nowrap; }
+    .pl small.ok { color: var(--b); font-weight: 700; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--line); flex: none; }
+    .dot.on { background: var(--online); box-shadow: 0 0 0 3px color-mix(in srgb, var(--online) 22%, transparent); }
+
+    .round { margin: 2px 0 6px; font-weight: 700; font-size: 18px; }
+    .round small { font-weight: 400; color: var(--muted); font-size: 14px; margin-left: 6px; }
+    .pair { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; margin: 4px 0 6px; }
+    .pair .w { border-radius: 16px; padding: 12px 10px; text-align: center; color: #fff; min-width: 0; }
+    .pair .w.a { background: var(--a); }
+    .pair .w.b { background: var(--b); }
+    .pair .w small { display: block; font-size: 12px; opacity: 0.85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .pair .w b { display: block; font-size: 22px; line-height: 1.3; word-break: break-all; }
+    .pair .plus { color: var(--muted); font-size: 20px; }
+    .pair.blank .w { background: var(--soft); color: var(--muted); }
+    .pair.pop .w.a { animation: inL 0.5s cubic-bezier(0.2, 0.8, 0.3, 1.25); }
+    .pair.pop .w.b { animation: inR 0.5s cubic-bezier(0.2, 0.8, 0.3, 1.25); }
+    @keyframes inL { from { transform: translateX(-36px) scale(0.85); opacity: 0; } }
+    @keyframes inR { from { transform: translateX(36px) scale(0.85); opacity: 0; } }
+    .hint { color: var(--muted); font-size: 14px; margin: 0 0 12px; text-align: center; }
+    .submit { padding-left: 20px; padding-right: 20px; }
+    .sealed {
+      display: flex; align-items: center; justify-content: space-between; gap: 10px;
+      background: var(--soft); border: 1.5px dashed var(--line); border-radius: 12px; padding: 11px 14px;
+    }
+    .sealed b { font-size: 18px; word-break: break-all; }
+    .status { text-align: center; color: var(--muted); font-size: 14px; margin: 12px 0 0; min-height: 22px; }
+    .status.ok { color: var(--b); font-weight: 600; }
+
+    .invite { font-size: 14px; color: var(--muted); word-break: break-all; background: var(--soft); border-radius: 10px; padding: 8px 10px; }
+    .meet { position: relative; height: 84px; width: 160px; margin: 0 auto; }
+    .meet .c { position: absolute; top: 6px; left: 50%; width: 72px; height: 72px; margin-left: -36px; border-radius: 50%; opacity: 0.85; }
+    .meet .c.a { background: var(--a); transform: translateX(-14px); animation: mA 0.9s cubic-bezier(0.2, 0.8, 0.3, 1.2); }
+    .meet .c.b { background: var(--b); transform: translateX(14px); animation: mB 0.9s cubic-bezier(0.2, 0.8, 0.3, 1.2); }
+    @keyframes mA { from { transform: translateX(-52px); } }
+    @keyframes mB { from { transform: translateX(52px); } }
+    .won h2 { margin: 0; font-size: 26px; color: var(--meet); }
+    .won .words { margin: 0; font-size: 18px; }
+    .won .words b { color: var(--meet); }
+
+    .histT { font-size: 15px; color: var(--muted); font-weight: 600; margin: 22px 0 8px; }
+    .hist { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
+    .hist li {
+      display: grid; grid-template-columns: 26px 1fr 1fr; gap: 8px; align-items: center;
+      background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px;
+    }
+    .hist .n { color: var(--muted); font-size: 13px; }
+    .hist .w { font-weight: 600; word-break: break-all; }
+    .hist .w.a { color: var(--a); }
+    .hist .w.b { color: var(--b); text-align: right; }
+    .hist li.hit { border-color: var(--meet); background: color-mix(in srgb, var(--meet) 12%, var(--card)); }
+    .hist li.hit .w { color: var(--meet); }
+    .roomfoot { text-align: center; margin-top: 22px; color: var(--muted); font-size: 14px; }
+
+    .cover { position: fixed; inset: 0; z-index: 5; background: var(--bg); display: flex; align-items: center; justify-content: center; padding: 24px; }
+    .cover .in { width: 100%; max-width: 380px; text-align: center; }
+    .cover .emoji { font-size: 56px; margin: 0; }
+    .cover h2 { margin: 6px 0; font-size: 26px; }
+    .cover .btn { margin-top: 24px; }
+
+    #toast {
+      position: fixed; left: 50%; bottom: calc(28px + env(safe-area-inset-bottom)); transform: translateX(-50%);
+      max-width: calc(100% - 32px); background: var(--ink); color: var(--bg);
+      padding: 10px 16px; border-radius: 12px; font-size: 15px; z-index: 10; box-shadow: var(--shadow);
+    }
+  </style>
+</head>
+<body>
+<main>
+  <!-- ========== 首页 ========== -->
+  <section id="home">
+    <header class="hero">
+      <svg class="logo" viewBox="0 0 120 72" aria-hidden="true">
+        <circle cx="44" cy="36" r="28" fill="var(--a)"/>
+        <circle cx="76" cy="36" r="28" fill="var(--b)"/>
+        <path d="M60 13.02A28 28 0 0 1 60 58.98A28 28 0 0 1 60 13.02Z" fill="var(--meet)"/>
+      </svg>
+      <h1>同词相遇</h1>
+      <p class="sub">两个人各写一个词,一轮轮往中间靠,<br>直到写出同一个词。</p>
+    </header>
+    <div class="card stack">
+      <label class="lbl" for="nick">昵称</label>
+      <input id="nick" class="txt" maxlength="10" placeholder="对方会看到这个名字" autocomplete="nickname">
+      <button id="create" class="btn">创建房间</button>
+      <form id="joinForm" class="row">
+        <input id="code" class="txt code" inputmode="numeric" maxlength="4" placeholder="房间号" autocomplete="off">
+        <button class="btn ghost">加入</button>
+      </form>
+    </div>
+    <button id="soloBtn" class="btn ghost big">📱 一部手机轮流玩</button>
+    <details class="rules">
+      <summary>怎么玩</summary>
+      <ol>
+        <li>第 1 轮:两人各写任意一个词,都交了才同时揭晓。</li>
+        <li>之后每轮:看着上一轮的两个词,各写一个能把它俩连起来的词。</li>
+        <li>两人写出同一个词就算相遇(不管空格、标点和大小写),轮数越少越默契。</li>
+        <li>这局出现过的词不能再用;交了还没揭晓,可以撤回改。</li>
+      </ol>
+      <p>例:「大海」+「天空」→ 两人都写「蓝色」,第 2 轮相遇。</p>
+    </details>
+    <p class="foot"><a href="https://games.wawazhiliao.com">🎲 仄梦桌游馆</a></p>
+  </section>
+
+  <!-- ========== 进房间(填昵称 / 满员 / 不存在) ========== -->
+  <section id="enter" hidden>
+    <div class="topbar"><a href="/" class="back" data-home>‹ 首页</a><span></span><span></span></div>
+    <div class="card stack center">
+      <div class="roomno">房间 <b id="enterCode"></b></div>
+      <p id="enterMsg" class="muted">正在连接…</p>
+      <form id="enterForm" class="stack" hidden>
+        <input id="enterNick" class="txt" maxlength="10" placeholder="你的昵称" autocomplete="nickname">
+        <button class="btn">进入房间</button>
+      </form>
+      <button id="enterHome" class="btn ghost" data-home hidden>回首页开个新房间</button>
+    </div>
+  </section>
+
+  <!-- ========== 联机房间 ========== -->
+  <section id="room" hidden>
+    <div class="topbar">
+      <a href="/" class="back" data-home>‹ 首页</a>
+      <span class="roomno">房间 <b id="roomCode"></b></span>
+      <button id="share" class="chip">邀请</button>
+    </div>
+    <div id="conn" class="conn" hidden>连接断开,正在重连…</div>
+    <div class="players">
+      <div class="pl a"><span class="dot on" id="meDot"></span><b id="meName"></b><small id="meState"></small></div>
+      <div class="pl b"><span class="dot" id="opDot"></span><b id="opName"></b><small id="opState"></small></div>
+    </div>
+
+    <div id="waitBox" class="card stack center" hidden>
+      <p style="margin:0;font-size:18px;font-weight:600">等对方进房间…</p>
+      <p class="muted">把链接发给 TA,打开填个昵称就进来了</p>
+      <div class="invite" id="inviteLink"></div>
+      <button id="copy" class="btn">复制邀请链接</button>
+    </div>
+
+    <div id="playBox" hidden>
+      <p class="round" id="roundLbl"></p>
+      <div id="pair"></div>
+      <p class="hint" id="hint"></p>
+      <form id="wordForm" class="row">
+        <input id="word" class="txt" maxlength="20" placeholder="写一个词" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" enterkeyhint="send">
+        <button class="btn submit">提交</button>
+      </form>
+      <div id="sealed" class="sealed" hidden>
+        <span>已提交:<b id="sealedWord"></b></span>
+        <button id="withdraw" class="chip" type="button">撤回修改</button>
+      </div>
+      <p class="status" id="status"></p>
+    </div>
+
+    <div id="wonBox" class="card stack center won" hidden>
+      <div class="meet"><span class="c a"></span><span class="c b"></span></div>
+      <h2 id="wonTitle"></h2>
+      <p class="words" id="wonWords"></p>
+      <button id="again" class="btn">再来一局</button>
+      <p class="muted" id="stats"></p>
+    </div>
+
+    <h3 class="histT" id="histT" hidden>整局记录</h3>
+    <ol class="hist" id="hist"></ol>
+    <div class="roomfoot">
+      <button id="restart" class="link-btn" hidden>重开这局</button>
+      <button id="leave" class="link-btn">离开房间</button>
+    </div>
+  </section>
+
+  <!-- ========== 一部手机轮流 ========== -->
+  <section id="solo" hidden>
+    <div class="topbar"><a href="/" class="back" data-home>‹ 首页</a><span class="roomno">一部手机轮流</span><span></span></div>
+    <div id="soloSetup" class="card stack">
+      <p class="muted">两人轮流拿手机:一个写完点「写好了」,屏幕会遮住,交给另一个写;两人都写完才揭晓。</p>
+      <div class="row"><input id="sA" class="txt" maxlength="6" placeholder="甲"><input id="sB" class="txt" maxlength="6" placeholder="乙"></div>
+      <button id="soloStart" class="btn">开始</button>
+    </div>
+    <div id="soloWrite" hidden>
+      <p class="round" id="sRound"></p>
+      <div id="sPair"></div>
+      <p class="hint" id="sHint"></p>
+      <form id="soloForm" class="row">
+        <input id="sWord" class="txt" maxlength="20" placeholder="写一个词" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" enterkeyhint="done">
+        <button class="btn submit">写好了</button>
+      </form>
+    </div>
+    <div id="soloCover" class="cover" hidden>
+      <div class="in">
+        <p class="emoji">🙈</p>
+        <h2 id="sCoverT"></h2>
+        <p class="muted">已经遮住了,别偷看</p>
+        <button id="soloGo" class="btn"></button>
+      </div>
+    </div>
+    <div id="soloReveal" hidden>
+      <div id="sResult"></div>
+      <button id="soloNext" class="btn" style="margin-top:14px"></button>
+    </div>
+    <h3 class="histT" id="sHistT" hidden>整局记录</h3>
+    <ol class="hist" id="sHist"></ol>
+  </section>
+</main>
+<div id="toast" hidden></div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+// 和服务端同一套:忽略空格、标点、符号、大小写
+const norm = (s) => String(s).normalize("NFKC").toLowerCase().replace(/[\s\p{P}\p{S}]/gu, "");
+const LS = {
+  get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+  del(k) { try { localStorage.removeItem(k); } catch {} },
+};
+const NICK_KEY = "tongci:nick";
+const tokKey = (code) => "tongci:p:" + code;
+const newToken = () => (crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2) + Date.now().toString(36));
+
+let toastTimer;
+function toast(msg) {
+  const el = $("#toast");
+  el.textContent = msg;
+  el.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => (el.hidden = true), 2400);
+}
+function show(id) {
+  for (const s of document.querySelectorAll("main > section")) s.hidden = s.id !== id;
+  window.scrollTo(0, 0);
+}
+
+// 上一轮两个词(或第 1 轮的空位)
+function pairHTML(lName, lWord, rName, rWord, pop) {
+  if (lWord == null) {
+    return `<div class="pair blank"><div class="w a"><small>${esc(lName)}</small><b>?</b></div><div class="plus">+</div><div class="w b"><small>${esc(rName)}</small><b>?</b></div></div>`;
+  }
+  return `<div class="pair${pop ? " pop" : ""}"><div class="w a"><small>${esc(lName)}</small><b>${esc(lWord)}</b></div><div class="plus">+</div><div class="w b"><small>${esc(rName)}</small><b>${esc(rWord)}</b></div></div>`;
+}
+function histHTML(history, lk, rk) {
+  return history.map((h, i) =>
+    `<li class="${h.hit ? "hit" : ""}"><span class="n">${i + 1}</span><span class="w a">${esc(h.words[lk])}</span><span class="w b">${esc(h.words[rk])}</span></li>`
+  ).join("");
+}
+const usedWords = (history) => new Set(history.flatMap((h) => Object.values(h.words).map(norm)));
+function checkWord(w, history) {
+  if (!norm(w)) return "写个词再提交";
+  if (usedWords(history).has(norm(w))) return `「${w}」这局已经出现过了,换一个`;
+  return null;
+}
+
+// ---------- 路由 ----------
+const ROOM_RE = /^\/r\/(\d{4})\/?$/;
+function go(path, opts) {
+  history.pushState(null, "", path);
+  route(opts);
+}
+function route(opts = {}) {
+  closeRoom();
+  const m = location.pathname.match(ROOM_RE);
+  if (m) return openRoom(m[1], opts.nick);
+  if (location.pathname === "/solo") return openSolo();
+  show("home");
+}
+window.addEventListener("popstate", () => route());
+document.addEventListener("click", (e) => {
+  const a = e.target.closest("[data-home]");
+  if (!a) return;
+  e.preventDefault();
+  go("/");
+});
+
+// ---------- 首页 ----------
+$("#nick").value = LS.get(NICK_KEY) || "";
+function takeNick(input) {
+  const v = input.value.trim();
+  if (!v) { toast("先起个昵称"); input.focus(); return null; }
+  LS.set(NICK_KEY, v);
+  return v;
+}
+$("#create").onclick = async () => {
+  const nick = takeNick($("#nick"));
+  if (!nick) return;
+  const btn = $("#create");
+  btn.disabled = true;
+  try {
+    const res = await fetch("/api/create", { method: "POST" });
+    if (!res.ok) throw new Error(res.status);
+    const { code } = await res.json();
+    go("/r/" + code, { nick });
+  } catch {
+    toast("创建失败,再试一次");
+  } finally {
+    btn.disabled = false;
+  }
+};
+$("#joinForm").onsubmit = (e) => {
+  e.preventDefault();
+  const nick = takeNick($("#nick"));
+  if (!nick) return;
+  const code = $("#code").value.trim();
+  if (!/^\d{4}$/.test(code)) return toast("房间号是 4 位数字");
+  go("/r/" + code, { nick });
+};
+$("#soloBtn").onclick = () => go("/solo");
+
+// ---------- 联机房间 ----------
+let R = null;
+
+function openRoom(code, nick) {
+  R = { code, token: LS.get(tokKey(code)) || newToken(), nick: nick || null, st: null, retry: 0, dead: false };
+  $("#enterCode").textContent = code;
+  $("#roomCode").textContent = code;
+  $("#enterNick").value = LS.get(NICK_KEY) || "";
+  setEnter("loading");
+  show("enter");
+  connect();
+}
+function closeRoom() {
+  if (!R) return;
+  R.dead = true;
+  try { R.ws?.close(); } catch {}
+  R = null;
+}
+function connect() {
+  const r = R;
+  const ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws?room=${r.code}`);
+  r.ws = ws;
+  ws.onopen = () => {
+    r.retry = 0;
+    $("#conn").hidden = true;
+    // 有存过的身份就直接回房;从首页带了昵称就直接进;都没有,服务端会回 need-nick
+    send({ t: "join", token: r.token, nick: r.nick || "" });
+  };
+  ws.onmessage = (e) => {
+    if (e.data === "pong" || R !== r) return;
+    onMsg(JSON.parse(e.data));
+  };
+  ws.onclose = () => {
+    if (R !== r || r.dead) return;
+    if (r.st) $("#conn").hidden = false;
+    r.timer = setTimeout(connect, Math.min(800 * 2 ** r.retry++, 8000));
+  };
+}
+function send(obj) {
+  if (R?.ws?.readyState === 1) R.ws.send(JSON.stringify(obj));
+  else toast("还没连上,稍等一下");
+}
+setInterval(() => { if (R?.ws?.readyState === 1) R.ws.send("ping"); }, 25000);
+// 手机切回前台时,断了的话立刻重连
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState !== "visible" || !R || R.dead) return;
+  if (R.ws && R.ws.readyState > 1) { clearTimeout(R.timer); connect(); }
+});
+
+function setEnter(mode, other) {
+  const msg = $("#enterMsg");
+  $("#enterForm").hidden = mode !== "form";
+  $("#enterHome").hidden = mode !== "full" && mode !== "gone";
+  msg.textContent = {
+    loading: "正在连接…",
+    form: other ? `${other} 在等你,填个昵称进去吧` : "填个昵称进入房间",
+    full: "房间已满 —— 这里已经有两个人在玩了",
+    gone: "房间不存在,或者已经过期了",
+  }[mode];
+  msg.style.color = mode === "full" || mode === "gone" ? "var(--a)" : "";
+}
+$("#enterForm").onsubmit = (e) => {
+  e.preventDefault();
+  const nick = takeNick($("#enterNick"));
+  if (!nick || !R) return;
+  R.nick = nick;
+  send({ t: "join", token: R.token, nick });
+};
+
+function onMsg(m) {
+  switch (m.t) {
+    case "need-nick":
+      setEnter("form", m.other);
+      break;
+    case "joined":
+      LS.set(tokKey(R.code), R.token);
+      break;
+    case "state":
+      if (!R.st) show("room");
+      render(m);
+      break;
+    case "full":
+      R.dead = true;
+      setEnter("full");
+      show("enter");
+      break;
+    case "gone":
+      R.dead = true;
+      LS.del(tokKey(R.code));
+      setEnter("gone");
+      show("enter");
+      break;
+    case "left":
+      LS.del(tokKey(R.code));
+      go("/");
+      break;
+    case "err":
+      toast(m.msg);
+      if (m.nick) { R.nick = null; setEnter("form"); }
+      // 撤回/提交被拒时,用最新状态把界面纠正回来
+      if (R.st) render(R.st);
+      break;
+  }
+}
+
+// 只改文字和显隐,不重建输入框——对方状态变化时手机键盘不会收起
+function render(st) {
+  const prev = R.st;
+  R.st = st;
+  const me = st.players.find((p) => p.id === st.me);
+  const op = st.players.find((p) => p.id !== st.me);
+  const playing = st.phase === "play";
+
+  $("#meName").textContent = me.nick + "(我)";
+  $("#meState").textContent = playing && st.mine ? "已写好 ✓" : "";
+  $("#meState").className = playing && st.mine ? "ok" : "";
+  $("#opName").textContent = op ? op.nick : "等待加入…";
+  $("#opDot").className = "dot" + (op?.online ? " on" : "");
+  const opState = !op ? "" : !op.online ? "离线" : playing ? (op.ready ? "已写好 ✓" : "思考中…") : "在线";
+  $("#opState").textContent = opState;
+  $("#opState").className = playing && op?.ready ? "ok" : "";
+
+  $("#waitBox").hidden = st.phase !== "wait";
+  $("#playBox").hidden = !playing;
+  $("#wonBox").hidden = st.phase !== "won";
+  $("#restart").hidden = !playing || st.history.length === 0;
+  $("#inviteLink").textContent = inviteURL();
+
+  // 有新揭晓(或换了一局)才清空输入框、重画上一轮
+  const grew = prev && st.history.length > prev.history.length;
+  if (prev && st.history.length !== prev.history.length) $("#word").value = "";
+
+  const last = st.history[st.history.length - 1];
+  const pairKey = st.round + ":" + (last ? JSON.stringify(last.words) : "") + (op?.nick ?? "");
+  if (pairKey !== R.pairKey) {
+    R.pairKey = pairKey;
+    $("#pair").innerHTML = last && !last.hit
+      ? pairHTML(me.nick, last.words[me.id], op?.nick ?? "对方", last.words[op?.id], grew)
+      : pairHTML(me.nick, null, op?.nick ?? "对方", null);
+  }
+
+  if (playing) {
+    $("#roundLbl").innerHTML = `第 ${st.round} 轮` + (st.round === 1 ? "<small>随便写一个词</small>" : "<small>想一个能连接它俩的词</small>");
+    $("#hint").textContent = st.round === 1 ? "脑子里冒出的第一个词就行" : "猜猜对方会往哪边想";
+    $("#wordForm").hidden = !!st.mine;
+    $("#sealed").hidden = !st.mine;
+    $("#sealedWord").textContent = st.mine || "";
+    const s = $("#status");
+    if (!op.online) { s.textContent = "对方掉线了,回来后接着玩"; s.className = "status"; }
+    else if (st.mine && op.ready) { s.textContent = "揭晓中…"; s.className = "status ok"; }
+    else if (st.mine) { s.textContent = "等对方写完 · 揭晓前还能撤回"; s.className = "status"; }
+    else if (op.ready) { s.textContent = "对方已经写好了,就等你"; s.className = "status ok"; }
+    else { s.textContent = "两人都交了才会同时揭晓"; s.className = "status"; }
+  }
+
+  if (st.phase === "won") {
+    $("#wonTitle").textContent = `第 ${st.round} 轮相遇!`;
+    const a = last.words[me.id], b = last.words[op.id];
+    $("#wonWords").innerHTML = a === b ? `你们都写了 <b>${esc(a)}</b>` : `<b>${esc(a)}</b> = <b>${esc(b)}</b>`;
+    $("#stats").textContent = `这个房间已相遇 ${st.played} 次 · 最快 ${st.best} 轮`;
+  }
+
+  $("#histT").hidden = st.history.length === 0;
+  $("#hist").innerHTML = op ? histHTML(st.history, me.id, op.id) : "";
+}
+
+$("#wordForm").onsubmit = (e) => {
+  e.preventDefault();
+  const w = $("#word").value.trim();
+  const bad = checkWord(w, R.st.history);
+  if (bad) return toast(bad);
+  send({ t: "submit", word: w });
+  $("#word").blur();
+};
+$("#withdraw").onclick = () => {
+  // 先在本地把输入框放回来并聚焦(要在点击里同步做,手机才会弹键盘)
+  $("#sealed").hidden = true;
+  $("#wordForm").hidden = false;
+  $("#word").value = R.st.mine || "";
+  $("#word").focus();
+  send({ t: "withdraw" });
+};
+$("#again").onclick = () => send({ t: "again" });
+$("#restart").onclick = () => { if (confirm("放弃这局,从第 1 轮重新开始?")) send({ t: "again" }); };
+$("#leave").onclick = () => { if (confirm("离开后这个位置会让给别人,确定吗?")) send({ t: "leave" }); };
+
+const inviteURL = () => `${location.origin}/r/${R?.code ?? ""}`;
+async function copyInvite() {
+  const url = inviteURL();
+  try {
+    await navigator.clipboard.writeText(url);
+    toast("链接已复制,发给 TA 吧");
+  } catch {
+    prompt("复制这个链接发给对方:", url);
+  }
+}
+$("#copy").onclick = copyInvite;
+$("#share").onclick = async () => {
+  if (navigator.share) {
+    try { await navigator.share({ title: "同词相遇", text: `来玩同词相遇,房间 ${R.code}`, url: inviteURL() }); return; } catch (e) { if (e.name === "AbortError") return; }
+  }
+  copyInvite();
+};
+
+// ---------- 一部手机轮流(纯前端) ----------
+const S = { names: ["甲", "乙"], round: 1, history: [], cur: [null, null], k: 0 };
+// 每轮先写的人交替:上一轮后写的人手里正拿着手机
+const firstOf = (round) => (round - 1) % 2;
+const writer = () => (S.k === 0 ? firstOf(S.round) : 1 - firstOf(S.round));
+
+function openSolo() {
+  $("#sA").value = S.names[0] === "甲" ? "" : S.names[0];
+  $("#sB").value = S.names[1] === "乙" ? "" : S.names[1];
+  show("solo");
+  soloStep("setup");
+}
+function soloNew() {
+  Object.assign(S, { round: 1, history: [], cur: [null, null], k: 0 });
+}
+function soloStep(step) {
+  $("#soloSetup").hidden = step !== "setup";
+  $("#soloWrite").hidden = step !== "write";
+  $("#soloCover").hidden = step !== "cover";
+  $("#soloReveal").hidden = step !== "reveal";
+  const [A, B] = S.names;
+  const last = S.history[S.history.length - 1];
+
+  if (step === "write") {
+    const who = S.names[writer()];
+    $("#sRound").innerHTML = `第 ${S.round} 轮 · <span style="color:var(--${writer() ? "b" : "a"})">${esc(who)}</span> 来写`;
+    $("#sPair").innerHTML = last ? pairHTML(A, last.words[0], B, last.words[1]) : pairHTML(A, null, B, null);
+    $("#sHint").textContent = last ? "想一个能连接它俩的词" : "随便写一个词";
+    $("#sWord").value = "";
+  }
+  if (step === "cover") {
+    const who = S.names[writer()];
+    $("#sCoverT").textContent = `把手机交给 ${who}`;
+    $("#soloGo").textContent = `我是 ${who},开始写`;
+  }
+  if (step === "reveal") {
+    if (last.hit) {
+      $("#sResult").innerHTML = `<div class="card stack center won"><div class="meet"><span class="c a"></span><span class="c b"></span></div><h2>第 ${S.round} 轮相遇!</h2><p class="words">${last.words[0] === last.words[1] ? `都写了 <b>${esc(last.words[0])}</b>` : `<b>${esc(last.words[0])}</b> = <b>${esc(last.words[1])}</b>`}</p></div>`;
+      $("#soloNext").textContent = "再来一局";
+    } else {
+      $("#sResult").innerHTML = `<p class="round">第 ${S.round} 轮揭晓<small>还没相遇</small></p>` + pairHTML(A, last.words[0], B, last.words[1], true);
+      $("#soloNext").textContent = `下一轮(${S.names[firstOf(S.round + 1)]} 先写)`;
+    }
+  }
+  $("#sHistT").hidden = S.history.length === 0 || step === "setup";
+  $("#sHist").innerHTML = step === "setup" ? "" : histHTML(S.history, 0, 1);
+}
+$("#soloStart").onclick = () => {
+  S.names = [$("#sA").value.trim() || "甲", $("#sB").value.trim() || "乙"];
+  if (S.names[0] === S.names[1]) return toast("两个人名字一样,改一个吧");
+  soloNew();
+  soloStep("write");
+};
+$("#soloForm").onsubmit = (e) => {
+  e.preventDefault();
+  const w = $("#sWord").value.trim();
+  const bad = checkWord(w, S.history);
+  if (bad) return toast(bad);
+  $("#sWord").blur();
+  $("#sWord").value = "";
+  S.cur[writer()] = w;
+  if (S.k === 0) {
+    S.k = 1;
+    return soloStep("cover");
+  }
+  const hit = norm(S.cur[0]) === norm(S.cur[1]);
+  S.history.push({ words: [S.cur[0], S.cur[1]], hit });
+  soloStep("reveal");
+};
+$("#soloGo").onclick = () => {
+  soloStep("write");
+  $("#sWord").focus();
+};
+$("#soloNext").onclick = () => {
+  const last = S.history[S.history.length - 1];
+  if (last.hit) soloNew();
+  else Object.assign(S, { round: S.round + 1, cur: [null, null], k: 0 });
+  soloStep("write");
+};
+
+route();
+</script>
+</body>
+</html>
